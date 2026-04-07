@@ -126,37 +126,37 @@ export default function App() {
       </div>
 
       {/* Header / HUD */}
-      <header className="bg-white/90 backdrop-blur-md shadow-sm p-4 sticky top-0 z-30 flex justify-between items-center relative">
-        <div>
+      <header className="bg-white/90 backdrop-blur-md shadow-sm p-4 sticky top-0 z-30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 relative">
+        <div className="w-full sm:w-auto">
           <h1 className="text-xl font-bold text-green-700">我的牧场</h1>
-          <div className="flex items-center gap-4 text-sm mt-1 text-slate-600">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-sm mt-1 text-slate-600">
             <span className="flex items-center gap-1"><Star className="w-4 h-4 text-yellow-500" /> Lv.{level} ({exp}/100)</span>
             <span className="flex items-center gap-1">
               <Coins className="w-4 h-4 text-amber-500" /> {coins}
               <button 
                 onClick={() => addCoins(999999)} 
-                className="ml-2 text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full transition-colors font-bold"
+                className="ml-1 sm:ml-2 text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full transition-colors font-bold"
               >
                 + 无限金币
               </button>
             </span>
-            <span className="font-mono bg-slate-100 px-2 py-1 rounded-md flex items-center gap-1 shadow-inner ml-2">
+            <span className="font-mono bg-slate-100 px-2 py-1 rounded-md flex items-center gap-1 shadow-inner ml-auto sm:ml-2">
               {isNight ? <Moon className="w-3 h-3 text-indigo-500" /> : <Sun className="w-3 h-3 text-orange-500" />}
               {timeString}
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <button 
             onClick={() => setIsDevPanelOpen(true)}
-            className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-2 rounded-full flex items-center gap-1 text-sm font-medium transition-colors"
+            className="flex-1 sm:flex-none justify-center bg-slate-800 hover:bg-slate-900 text-white px-3 py-2 rounded-full flex items-center gap-1 text-sm font-medium transition-colors"
           >
             <Wrench className="w-4 h-4" /> 开发者面板
           </button>
           <button 
             onClick={addSheep}
             disabled={coins < 50 || sheepList.length >= maxSheep}
-            className="bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white px-4 py-2 rounded-full flex items-center gap-1 text-sm font-medium transition-colors"
+            className="flex-1 sm:flex-none justify-center bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white px-4 py-2 rounded-full flex items-center gap-1 text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" /> 买羊 (50)
           </button>
@@ -170,42 +170,42 @@ export default function App() {
         <SheepPen />
 
         {/* Farm Actions */}
-        <div className="flex justify-center gap-4 mb-8 flex-wrap">
+        <div className="flex justify-center gap-2 sm:gap-4 mb-6 sm:mb-8 flex-wrap">
           <button
             onClick={fillTrough}
             disabled={coins < 10 || troughCapacity >= maxTroughCapacity}
-            className="bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-sm transition-colors"
+            className="bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl flex items-center gap-1 sm:gap-2 text-sm sm:text-base font-bold shadow-sm transition-colors flex-1 sm:flex-none justify-center min-w-[120px]"
           >
-            <Wheat className="w-5 h-5" /> 放食物 (10)
+            <Wheat className="w-4 h-4 sm:w-5 sm:h-5" /> 放食物 (10)
           </button>
           <button
             onClick={upgradeTrough}
             disabled={coins < 100 * (maxTroughCapacity / 100)}
-            className="bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-sm transition-colors"
+            className="bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl flex items-center gap-1 sm:gap-2 text-sm sm:text-base font-bold shadow-sm transition-colors flex-1 sm:flex-none justify-center min-w-[120px]"
           >
-            <Plus className="w-5 h-5" /> 升级食槽 ({100 * (maxTroughCapacity / 100)})
+            <Plus className="w-4 h-4 sm:w-5 sm:h-5" /> 升级食槽 ({100 * (maxTroughCapacity / 100)})
           </button>
           <button
             onClick={cleanAll}
             disabled={coins < 10 || !(feces?.length > 0)}
-            className="bg-blue-500 hover:bg-blue-600 disabled:bg-slate-300 text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-sm transition-colors"
+            className="bg-blue-500 hover:bg-blue-600 disabled:bg-slate-300 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl flex items-center gap-1 sm:gap-2 text-sm sm:text-base font-bold shadow-sm transition-colors flex-1 sm:flex-none justify-center min-w-[120px]"
           >
-            <Droplets className="w-5 h-5" /> 清理粪便 (10)
+            <Droplets className="w-4 h-4 sm:w-5 sm:h-5" /> 清理粪便 (10)
           </button>
           <button
             onClick={upgradePen}
             disabled={coins < upgradePenCost || level < upgradePenLevelReq}
-            className="bg-purple-500 hover:bg-purple-600 disabled:bg-slate-300 text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold shadow-sm transition-colors"
+            className="bg-purple-500 hover:bg-purple-600 disabled:bg-slate-300 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl flex items-center gap-1 sm:gap-2 text-sm sm:text-base font-bold shadow-sm transition-colors flex-1 sm:flex-none justify-center min-w-[120px]"
           >
-            <Plus className="w-5 h-5" /> 扩建羊圈 ({upgradePenCost})
+            <Plus className="w-4 h-4 sm:w-5 sm:h-5" /> 扩建 ({upgradePenCost})
             {level < upgradePenLevelReq && <span className="text-xs ml-1">(需Lv.{upgradePenLevelReq})</span>}
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-          <div className="flex justify-between items-center mb-4">
+        <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-1 sm:gap-0">
             <h2 className="text-lg font-bold text-slate-800">羊群状态 ({sheepList.length}/{maxSheep})</h2>
-            <span className="text-sm text-slate-500">将鼠标悬停在羊圈中的小羊上可查看详细状态</span>
+            <span className="text-xs sm:text-sm text-slate-500">将鼠标悬停在羊圈中的小羊上可查看详细状态</span>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -267,9 +267,9 @@ export default function App() {
 
       {/* Developer Panel Modal */}
       {isDevPanelOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="bg-slate-800 text-white p-4 flex justify-between items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-slate-800 text-white p-4 flex justify-between items-center shrink-0">
               <h2 className="text-lg font-bold flex items-center gap-2">
                 <Wrench className="w-5 h-5" /> 开发者面板
               </h2>
@@ -277,7 +277,7 @@ export default function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 flex flex-col gap-4 overflow-y-auto">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">金币 (Coins)</label>
                 <input 
