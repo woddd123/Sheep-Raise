@@ -1,0 +1,5 @@
+{
+  "name": "Sheep Farm Simulator",
+  "description": "A casual simulation and management game where you raise sheep, upgrade pens, and handle random farming events.",
+  "requestFramePermissions": []
+}
