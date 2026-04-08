@@ -1,10 +1,12 @@
+import localSheepAudio from '../assets/sheep.mp3';
+
 let audioCtx: AudioContext | null = null;
 let sheepBuffer: AudioBuffer | null = null;
 let useSynthFallback = false;
 
 const AUDIO_URLS = [
-  // Local downloaded MP3 (User requested)
-  '/sheep.mp3',
+  // Local downloaded MP3 (Imported via Vite to handle base paths correctly)
+  localSheepAudio,
   // Google Actions OGG (Works on Chrome/Firefox/Edge)
   'https://actions.google.com/sounds/v1/animals/sheep_bleat.ogg',
   // Mixkit MP3 (Works on Safari)
