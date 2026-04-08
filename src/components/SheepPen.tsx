@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { SheepEntity } from './SheepEntity';
 
-export function SheepPen() {
+export function SheepPen({ isFullScreen = false }: { isFullScreen?: boolean }) {
   const sheepList = useGameStore(state => state.sheepList);
   const troughCapacity = useGameStore(state => state.troughCapacity);
   const maxTroughCapacity = useGameStore(state => state.maxTroughCapacity);
@@ -10,29 +10,31 @@ export function SheepPen() {
   const penLevel = useGameStore(state => state.penLevel);
   const [isGateOpen, setIsGateOpen] = useState(false);
 
-  // Map penLevel to max-width class
-  const maxWidthClass = 
-    !penLevel || penLevel === 1 ? 'max-w-md' :
-    penLevel === 2 ? 'max-w-lg' :
-    penLevel === 3 ? 'max-w-xl' :
-    penLevel === 4 ? 'max-w-2xl' :
-    penLevel === 5 ? 'max-w-3xl' :
-    penLevel === 6 ? 'max-w-4xl' :
-    penLevel === 7 ? 'max-w-5xl' :
-    penLevel === 8 ? 'max-w-6xl' :
-    'max-w-7xl';
+  // Map penLevel to width for Full Screen mode
+  const actualWidth = 
+    !penLevel || penLevel === 1 ? 'w-[500px]' :
+    penLevel === 2 ? 'w-[600px]' :
+    penLevel === 3 ? 'w-[700px]' :
+    penLevel === 4 ? 'w-[800px]' :
+    penLevel === 5 ? 'w-[900px]' :
+    penLevel === 6 ? 'w-[1000px]' :
+    penLevel === 7 ? 'w-[1100px]' :
+    penLevel === 8 ? 'w-[1200px]' :
+    'w-[1400px]';
+
+  // Main view is always a fixed square, Full screen uses actual width
+  const penContainerClass = isFullScreen 
+    ? `${actualWidth} h-[80vh]` 
+    : 'w-[90vw] max-w-[400px] h-[90vw] max-h-[400px]';
 
   return (
-    <div className="flex justify-center mb-12 mt-4">
-      <div className={`relative w-full ${maxWidthClass} transition-all duration-1000 ease-in-out`}>
+    <div className={`flex justify-center items-center w-full ${isFullScreen ? 'h-full p-8' : 'min-h-[300px] mb-8 mt-4'}`}>
+      <div className={`relative ${penContainerClass} transition-all duration-500 ease-in-out`}>
         <div 
-          className="relative w-full aspect-square shadow-2xl rounded-xl overflow-hidden"
-          style={{
-            boxShadow: 'inset 0 0 24px rgba(0,0,0,0.3), 0 10px 25px rgba(0,0,0,0.15)',
-          }}
+          className="relative w-full h-full rounded-2xl overflow-hidden bg-transparent"
         >
         {/* Fence Overlay */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none z-20" style={{ imageRendering: 'pixelated' }}>
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-40" style={{ imageRendering: 'pixelated' }}>
           <defs>
             {/* Top/Bottom Fence Pattern */}
             <pattern id="fence-h" x="0" y="0" width="16" height="32" patternUnits="userSpaceOnUse">
@@ -51,29 +53,22 @@ export function SheepPen() {
           </defs>
           
           {/* Draw Fences */}
-          <rect x="0" y="0" width="32" height="100%" fill="url(#fence-v)" />
-          <rect x="calc(100% - 32px)" y="0" width="32" height="100%" fill="url(#fence-v)" />
+          <rect x="0" y="0" width="24" height="100%" fill="url(#fence-v)" />
+          <rect x="100%" y="0" width="24" height="100%" fill="url(#fence-v)" transform="translate(-24, 0)" />
           
           {/* Top Fence with Gap for Gate */}
-          <rect x="0" y="0" width="calc(50% - 32px)" height="32" fill="url(#fence-h)" />
-          <rect x="calc(50% + 32px)" y="0" width="calc(50% - 32px)" height="32" fill="url(#fence-h)" />
+          <rect x="0" y="0" width="45%" height="24" fill="url(#fence-h)" />
+          <rect x="55%" y="0" width="45%" height="24" fill="url(#fence-h)" />
           
           {/* Bottom Fence */}
-          <rect x="0" y="calc(100% - 32px)" width="100%" height="32" fill="url(#fence-h)" />
+          <rect x="0" y="100%" width="100%" height="24" fill="url(#fence-h)" transform="translate(0, -24)" />
           
           {/* Corner Posts */}
           <g stroke="#5c3a18" strokeWidth="2">
-            <rect x="2" y="2" width="28" height="28" rx="4" fill="#8b5a2b" />
-            <rect x="6" y="6" width="20" height="20" rx="2" fill="none" stroke="#a06a38" />
-            
-            <rect x="calc(100% - 30px)" y="2" width="28" height="28" rx="4" fill="#8b5a2b" />
-            <rect x="calc(100% - 26px)" y="6" width="20" height="20" rx="2" fill="none" stroke="#a06a38" />
-            
-            <rect x="2" y="calc(100% - 30px)" width="28" height="28" rx="4" fill="#8b5a2b" />
-            <rect x="6" y="calc(100% - 26px)" width="20" height="20" rx="2" fill="none" stroke="#a06a38" />
-            
-            <rect x="calc(100% - 30px)" y="calc(100% - 30px)" width="28" height="28" rx="4" fill="#8b5a2b" />
-            <rect x="calc(100% - 26px)" y="calc(100% - 26px)" width="20" height="20" rx="2" fill="none" stroke="#a06a38" />
+            <rect x="0" y="0" width="24" height="24" rx="2" fill="#8b5a2b" />
+            <rect x="100%" y="0" width="24" height="24" rx="2" fill="#8b5a2b" transform="translate(-24, 0)" />
+            <rect x="0" y="100%" width="24" height="24" rx="2" fill="#8b5a2b" transform="translate(0, -24)" />
+            <rect x="100%" y="100%" width="24" height="24" rx="2" fill="#8b5a2b" transform="translate(-24, -24)" />
           </g>
         </svg>
         {/* Gate */}
@@ -103,9 +98,9 @@ export function SheepPen() {
           </div>
         </div>
 
-        {/* Dirt patches */}
-        <div className="absolute top-1/4 left-1/4 w-32 h-20 bg-[#8b6b4a]/30 rounded-[100%] blur-md pointer-events-none"></div>
-        <div className="absolute bottom-1/3 right-1/4 w-40 h-24 bg-[#8b6b4a]/30 rounded-[100%] blur-md pointer-events-none"></div>
+        {/* Dirt patches - Scaled and subtle */}
+        <div className="absolute top-[20%] left-[20%] w-[25%] h-[15%] bg-[#6b5236]/20 rounded-[100%] blur-xl pointer-events-none"></div>
+        <div className="absolute bottom-[30%] right-[20%] w-[30%] h-[18%] bg-[#6b5236]/20 rounded-[100%] blur-xl pointer-events-none"></div>
 
         {/* Render Sheep */}
         {sheepList.map(sheep => (
@@ -118,8 +113,8 @@ export function SheepPen() {
             key={f.id}
             className="absolute text-sm drop-shadow-sm pointer-events-none"
             style={{
-              left: `${f.x}%`,
-              top: `${f.y}%`,
+              left: `${Math.max(18, Math.min(82, f.x))}%`,
+              top: `${Math.max(18, Math.min(82, f.y))}%`,
               transform: 'translate(-50%, -50%)',
               zIndex: Math.round(f.y) - 1
             }}
@@ -130,7 +125,7 @@ export function SheepPen() {
         </div>
 
         {/* Trough (Placed outside the bottom fence) */}
-        <div className="absolute z-30" style={{ left: '50%', bottom: '-16px', transform: 'translateX(-50%)' }}>
+        <div className="absolute z-50" style={{ left: '50%', bottom: '-16px', transform: 'translateX(-50%)' }}>
           <div className="relative w-40 h-14">
             <div className="absolute -bottom-1 left-2 w-36 h-4 bg-black/30 rounded-full blur-sm" />
             <div className="absolute inset-0 bg-[#8b5a2b] border-4 border-b-0 border-[#5c3a18] rounded-t-lg flex items-end overflow-hidden">

@@ -10,13 +10,17 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
   useEffect(() => { isNightRef.current = isNight; }, [isNight]);
   const sheepDefecate = useGameStore(state => state.sheepDefecate);
 
-  // Random initial position within the pen (10% to 90% to avoid edges)
+  // Random initial position within the pen (strictly inside fences)
   const [pos, setPos] = useState({ 
-    x: 10 + Math.random() * 80, 
-    y: 10 + Math.random() * 80 
+    x: 20 + Math.random() * 60, 
+    y: 20 + Math.random() * 60 
   });
   const posRef = useRef(pos);
   useEffect(() => { posRef.current = pos; }, [pos]);
+
+  // Movement bounds: 18% to 82% to ensure sheep stays inside the 24px fences
+  const MIN_BOUND = 18;
+  const MAX_BOUND = 82;
 
   // Sheep faces left by default (head is on the left in the SVG). 
   const [facingRight, setFacingRight] = useState(Math.random() > 0.5);
@@ -138,8 +142,8 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
           let newX = prevPos.x + (dx / dist) * step;
           let newY = prevPos.y + (dy / dist) * step;
           
-          newX = Math.max(10, Math.min(90, newX));
-          newY = Math.max(10, Math.min(90, newY));
+          newX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newX));
+          newY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newY));
 
           setFacingRight(newX > prevPos.x);
           setIsMoving(true);
@@ -154,11 +158,11 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
       } else {
         // Random wander
         if (Math.random() > 0.4) {
-          let newX = 10 + Math.random() * 80;
-          let newY = 10 + Math.random() * 80;
+          let newX = MIN_BOUND + Math.random() * (MAX_BOUND - MIN_BOUND);
+          let newY = MIN_BOUND + Math.random() * (MAX_BOUND - MIN_BOUND);
           
-          newX = Math.max(10, Math.min(90, newX));
-          newY = Math.max(10, Math.min(90, newY));
+          newX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newX));
+          newY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newY));
 
           setFacingRight(newX > prevPos.x);
           setIsMoving(true);
@@ -204,14 +208,14 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
     const normX = dist === 0 ? (Math.random() > 0.5 ? 1 : -1) : dx / dist;
     const normY = dist === 0 ? (Math.random() > 0.5 ? 1 : -1) : dy / dist;
     
-    const force = 15; // Push back by 15% of pen size
+    const force = 12; // Push back by 12% of pen size
     
     let newX = pos.x + normX * force;
     let newY = pos.y + normY * force;
     
     // Keep within bounds
-    newX = Math.max(10, Math.min(90, newX));
-    newY = Math.max(10, Math.min(90, newY));
+    newX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newX));
+    newY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newY));
     
     setIsKnockedBack(true);
     setPos({ x: newX, y: newY });

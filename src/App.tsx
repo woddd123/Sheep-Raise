@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
+import { motion } from 'motion/react';
 import { useGameStore } from './store/gameStore';
-import { Droplets, Wheat, Heart, Coins, Star, Plus, Moon, Sun, Wrench, X } from 'lucide-react';
+import { Droplets, Wheat, Heart, Coins, Star, Plus, Moon, Sun, Wrench, X, Maximize2 } from 'lucide-react';
 import { SheepPen } from './components/SheepPen';
 
 export default function App() {
   const { level, exp, coins, sheepList, gameTick, addSheep, fillTrough, cleanAll, troughCapacity, maxTroughCapacity, addCoins, upgradeTrough, timeOfDay, feces, penLevel, upgradePen, sellSheep, shearSheep, breedSheep, devSetState, wool } = useGameStore();
 
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
+  const [isFullScreenView, setIsFullScreenView] = useState(false);
 
   const maxSheep = 4 + (penLevel || 1) * 4;
   const upgradePenCost = (penLevel || 1) * 500;
   const upgradePenLevelReq = (penLevel || 1) * 2;
+  const penArea = (penLevel || 1) * 25; // Simple area calculation: 25sqm per level
 
   const isNight = timeOfDay >= 19 || timeOfDay < 6;
   const hours = Math.floor(timeOfDay);
@@ -55,44 +58,78 @@ export default function App() {
   }, [gameTick]);
 
   return (
-    <div className="min-h-screen bg-[#7ec850] text-slate-800 font-sans pb-20 relative overflow-hidden">
-      {/* Environmental Lighting Overlays */}
+    <div className="min-h-screen bg-[#7ec850] text-slate-800 font-sans pb-20 relative">
+      {/* Top Header for Time and Progress */}
+      <div className="fixed top-4 left-0 right-0 z-50 px-4 pointer-events-none flex items-center justify-between gap-4">
+        {/* Empty space to balance the right side if needed, or just let justify-between handle it */}
+        <div className="hidden md:block w-24" /> 
+
+        {/* Floating Stick Time Progress Bar */}
+        <div className="relative flex-1 max-w-xl h-3">
+          <div className="relative w-full h-full">
+            {/* Shadow */}
+            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-[98%] h-2 bg-black/15 rounded-full blur-sm" />
+            
+            {/* Stick Body */}
+            <div className="absolute inset-0 bg-gradient-to-b from-sky-300 via-sky-500 to-sky-800 rounded-full border border-white/40 shadow-md overflow-visible">
+              {/* Progress Track Background */}
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-900/30 via-transparent to-indigo-900/30 rounded-full" />
+
+              {/* Time Markers */}
+              <div className="absolute inset-x-4 inset-y-0 flex justify-between items-center opacity-40">
+                {[0, 6, 12, 18, 24].map(h => (
+                  <div key={h} className="h-full w-[1px] bg-white/60" />
+                ))}
+              </div>
+
+              {/* Celestial Bodies (Sliding on the stick) */}
+              <div className="relative w-full h-full px-4">
+                {sunProgress >= 0 && (
+                  <motion.div 
+                    className="absolute top-1/2 -translate-y-1/2 text-3xl z-10 drop-shadow-[0_0_12px_rgba(253,224,71,1)]"
+                    animate={{ 
+                      left: `calc(${sunProgress * 100}% - 18px)`,
+                      opacity: sunProgress < 0.01 || sunProgress > 0.99 ? 0 : 1
+                    }}
+                    transition={{ duration: 1, ease: "linear" }}
+                  >
+                    ☀️
+                  </motion.div>
+                )}
+                
+                {moonProgress >= 0 && (
+                  <motion.div 
+                    className="absolute top-1/2 -translate-y-1/2 text-2xl z-10 drop-shadow-[0_0_12px_rgba(241,245,249,1)]"
+                    animate={{ 
+                      left: `calc(${moonProgress * 100}% - 14px)`,
+                      opacity: moonProgress < 0.01 || moonProgress > 0.99 ? 0 : 1
+                    }}
+                    transition={{ duration: 1, ease: "linear" }}
+                  >
+                    🌙
+                  </motion.div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Minimal Time Display */}
+        <div className="bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-white/40 flex items-center gap-2 font-mono text-sm pointer-events-auto">
+          {isNight ? <Moon className="w-4 h-4 text-indigo-500" /> : <Sun className="w-4 h-4 text-orange-500" />}
+          {timeString}
+        </div>
+      </div>
+
+      {/* Environmental Lighting Overlays (Full Screen) */}
       <div 
-        className="fixed inset-0 pointer-events-none z-20 transition-all duration-1000 ease-linear" 
+        className="fixed inset-0 pointer-events-none z-40 transition-all duration-1000 ease-linear" 
         style={{ backgroundColor: `rgba(15, 23, 42, ${darkness})` }} 
       />
       <div 
-        className="fixed inset-0 pointer-events-none z-20 transition-all duration-1000 ease-linear mix-blend-color-burn" 
+        className="fixed inset-0 pointer-events-none z-40 transition-all duration-1000 ease-linear mix-blend-color-burn" 
         style={{ backgroundColor: `rgba(249, 115, 22, ${sunsetOpacity})` }} 
       />
-
-      {/* Celestial Bodies */}
-      <div className="fixed inset-0 pointer-events-none z-[1] overflow-hidden">
-        {sunProgress >= 0 && (
-          <div 
-            className="absolute w-24 h-24 bg-yellow-300 rounded-full blur-[4px] shadow-[0_0_60px_rgba(253,224,71,0.8)] flex items-center justify-center text-6xl"
-            style={{
-              left: `calc(${sunProgress * 100}% - 3rem)`,
-              top: `${Math.max(5, 40 - Math.sin(sunProgress * Math.PI) * 35)}vh`,
-              transition: 'left 1s linear, top 1s linear'
-            }}
-          >
-            ☀️
-          </div>
-        )}
-        {moonProgress >= 0 && (
-          <div 
-            className="absolute w-20 h-20 bg-slate-100 rounded-full blur-[2px] shadow-[0_0_50px_rgba(241,245,249,0.9)] flex items-center justify-center text-5xl"
-            style={{
-              left: `calc(${moonProgress * 100}% - 2.5rem)`,
-              top: `${Math.max(5, 40 - Math.sin(moonProgress * Math.PI) * 35)}vh`,
-              transition: 'left 1s linear, top 1s linear'
-            }}
-          >
-            🌙
-          </div>
-        )}
-      </div>
 
       {/* Fullscreen Grass Background */}
       <div className="fixed inset-0 pointer-events-none z-0">
@@ -125,80 +162,136 @@ export default function App() {
         </svg>
       </div>
 
-      {/* Header / HUD */}
-      <header className="bg-white/90 backdrop-blur-md shadow-sm p-4 sticky top-0 z-30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 relative">
-        <div className="w-full sm:w-auto">
-          <h1 className="text-xl font-bold text-green-700">我的牧场</h1>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-sm mt-1 text-slate-600">
-            <span className="flex items-center gap-1"><Star className="w-4 h-4 text-yellow-500" /> Lv.{level} ({exp}/100)</span>
-            <span className="flex items-center gap-1">
-              <Coins className="w-4 h-4 text-amber-500" /> {coins}
-              <button 
-                onClick={() => addCoins(999999)} 
-                className="ml-1 sm:ml-2 text-xs bg-amber-100 hover:bg-amber-200 text-amber-700 px-2 py-0.5 rounded-full transition-colors font-bold"
-              >
-                + 无限金币
-              </button>
-            </span>
-            <span className="font-mono bg-slate-100 px-2 py-1 rounded-md flex items-center gap-1 shadow-inner ml-auto sm:ml-2">
-              {isNight ? <Moon className="w-3 h-3 text-indigo-500" /> : <Sun className="w-3 h-3 text-orange-500" />}
-              {timeString}
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <button 
-            onClick={() => setIsDevPanelOpen(true)}
-            className="flex-1 sm:flex-none justify-center bg-slate-800 hover:bg-slate-900 text-white px-3 py-2 rounded-full flex items-center gap-1 text-sm font-medium transition-colors"
-          >
-            <Wrench className="w-4 h-4" /> 开发者面板
-          </button>
-          <button 
-            onClick={addSheep}
-            disabled={coins < 50 || sheepList.length >= maxSheep}
-            className="flex-1 sm:flex-none justify-center bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white px-4 py-2 rounded-full flex items-center gap-1 text-sm font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" /> 买羊 (50)
-          </button>
-        </div>
-      </header>
-
       {/* Main Farm Area */}
-      <main className="p-4 max-w-4xl mx-auto relative z-10">
+      <main className="p-4 max-w-4xl mx-auto relative z-10 pt-32">
         
-        {/* Visual Sheep Pen */}
-        <SheepPen />
+        {/* Visual Sheep Pen Area */}
+        <div className="w-full flex flex-col items-center gap-4 mb-8">
+          <div className="w-full flex justify-center">
+            <SheepPen />
+          </div>
+          
+          <button 
+            onClick={() => setIsFullScreenView(true)}
+            className="bg-indigo-600/90 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-lg transition-all flex items-center gap-2 active:scale-95 backdrop-blur-sm"
+          >
+            <Maximize2 className="w-4 h-4" /> 查看完整羊圈
+          </button>
+        </div>
 
-        {/* Farm Actions */}
-        <div className="flex justify-center gap-2 sm:gap-4 mb-6 sm:mb-8 flex-wrap">
-          <button
-            onClick={fillTrough}
-            disabled={coins < 10 || troughCapacity >= maxTroughCapacity}
-            className="bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl flex items-center gap-1 sm:gap-2 text-sm sm:text-base font-bold shadow-sm transition-colors flex-1 sm:flex-none justify-center min-w-[120px]"
+        {/* Management Panel (我的牧场) */}
+        <div className="bg-white/95 backdrop-blur-md rounded-[2rem] p-4 sm:p-6 shadow-2xl border-2 border-green-600/20 mb-8 w-full max-w-2xl">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-slate-100 pb-6">
+            <div className="w-full md:w-auto">
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl sm:text-3xl font-black text-green-700 tracking-tight">我的牧场</h1>
+                <div className="bg-green-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest">
+                  Level {level}
+                </div>
+              </div>
+              <div className="flex items-center justify-between sm:justify-start gap-4 sm:gap-6 mt-3">
+                <div className="flex flex-col">
+                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">资产</span>
+                  <div className="flex items-center gap-1 text-amber-600 font-black text-base sm:text-lg">
+                    <Coins className="w-4 h-4 sm:w-5 sm:h-5" /> {coins.toLocaleString()}
+                  </div>
+                </div>
+                <div className="flex flex-col border-l border-slate-100 pl-4 sm:pl-6">
+                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">面积</span>
+                  <div className="flex items-center gap-1 text-green-600 font-black text-base sm:text-lg">
+                    <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" /> {penArea} ㎡
+                  </div>
+                </div>
+                <div className="flex flex-col border-l border-slate-100 pl-4 sm:pl-6">
+                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">羊群</span>
+                  <div className="flex items-center gap-1 text-indigo-600 font-black text-base sm:text-lg">
+                    <Heart className="w-4 h-4 sm:w-5 sm:h-5" /> {sheepList.length}/{maxSheep}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 w-full md:w-auto">
+              <button 
+                onClick={addSheep}
+                disabled={coins < 50 || sheepList.length >= maxSheep}
+                className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white px-6 sm:px-8 py-2.5 sm:py-3 rounded-2xl flex items-center justify-center gap-2 text-xs sm:text-sm font-black transition-all shadow-[0_4px_0_rgb(22,101,52)] active:shadow-none active:translate-y-1"
+              >
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" /> 买羊 (50)
+              </button>
+              <button 
+                onClick={() => setIsDevPanelOpen(true)}
+                className="bg-slate-800 hover:bg-slate-900 text-white p-2.5 sm:p-3 rounded-2xl transition-all shadow-[0_4px_0_rgb(30,41,59)] active:shadow-none active:translate-y-1"
+                title="开发者面板"
+              >
+                <Wrench className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+            </div>
+          </div>
+
+          {/* Action Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            <button
+              onClick={fillTrough}
+              disabled={coins < 10 || troughCapacity >= maxTroughCapacity}
+              className="group relative bg-amber-500 hover:bg-amber-600 disabled:bg-slate-100 disabled:text-slate-400 text-white p-3 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] flex flex-col items-center gap-2 sm:gap-3 text-xs sm:text-sm font-black shadow-[0_4px_0_rgb(180,83,9)] active:shadow-none active:translate-y-1 transition-all overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <Wheat className="w-6 h-6 sm:w-8 sm:h-8" />
+              <span>放食物 (10)</span>
+            </button>
+            <button
+              onClick={upgradeTrough}
+              disabled={coins < 100 * (maxTroughCapacity / 100)}
+              className="group relative bg-orange-500 hover:bg-orange-600 disabled:bg-slate-100 disabled:text-slate-400 text-white p-3 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] flex flex-col items-center gap-2 sm:gap-3 text-xs sm:text-sm font-black shadow-[0_4px_0_rgb(194,65,12)] active:shadow-none active:translate-y-1 transition-all overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <Plus className="w-6 h-6 sm:w-8 sm:h-8" />
+              <span>升级食槽 ({100 * (maxTroughCapacity / 100)})</span>
+            </button>
+            <button
+              onClick={cleanAll}
+              disabled={coins < 10 || !(feces?.length > 0)}
+              className="group relative bg-blue-500 hover:bg-blue-600 disabled:bg-slate-100 disabled:text-slate-400 text-white p-3 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] flex flex-col items-center gap-2 sm:gap-3 text-xs sm:text-sm font-black shadow-[0_4px_0_rgb(29,78,216)] active:shadow-none active:translate-y-1 transition-all overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <Droplets className="w-6 h-6 sm:w-8 sm:h-8" />
+              <span>清理粪便 (10)</span>
+            </button>
+            <button
+              onClick={upgradePen}
+              disabled={coins < upgradePenCost || level < upgradePenLevelReq}
+              className="group relative bg-purple-500 hover:bg-purple-600 disabled:bg-slate-100 disabled:text-slate-400 text-white p-3 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] flex flex-col items-center gap-2 sm:gap-3 text-xs sm:text-sm font-black shadow-[0_4px_0_rgb(126,34,206)] active:shadow-none active:translate-y-1 transition-all overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <Plus className="w-6 h-6 sm:w-8 sm:h-8" />
+              <div className="flex flex-col items-center">
+                <span>扩建 ({upgradePenCost})</span>
+                {level < upgradePenLevelReq && <span className="text-[9px] font-bold opacity-70">需Lv.{upgradePenLevelReq}</span>}
+              </div>
+            </button>
+          </div>
+
+          {/* Experience Bar */}
+          <div className="mt-6">
+            <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
+              <span>经验值 (EXP)</span>
+              <span>{exp} / 100</span>
+            </div>
+            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+              <motion.div 
+                className="h-full bg-green-500"
+                initial={{ width: 0 }}
+                animate={{ width: `${exp}%` }}
+              />
+            </div>
+          </div>
+          
+          <button 
+            onClick={() => addCoins(999999)} 
+            className="mt-4 w-full text-[10px] bg-amber-50 hover:bg-amber-100 text-amber-600 py-1 rounded-lg transition-colors font-bold border border-amber-100"
           >
-            <Wheat className="w-4 h-4 sm:w-5 sm:h-5" /> 放食物 (10)
-          </button>
-          <button
-            onClick={upgradeTrough}
-            disabled={coins < 100 * (maxTroughCapacity / 100)}
-            className="bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl flex items-center gap-1 sm:gap-2 text-sm sm:text-base font-bold shadow-sm transition-colors flex-1 sm:flex-none justify-center min-w-[120px]"
-          >
-            <Plus className="w-4 h-4 sm:w-5 sm:h-5" /> 升级食槽 ({100 * (maxTroughCapacity / 100)})
-          </button>
-          <button
-            onClick={cleanAll}
-            disabled={coins < 10 || !(feces?.length > 0)}
-            className="bg-blue-500 hover:bg-blue-600 disabled:bg-slate-300 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl flex items-center gap-1 sm:gap-2 text-sm sm:text-base font-bold shadow-sm transition-colors flex-1 sm:flex-none justify-center min-w-[120px]"
-          >
-            <Droplets className="w-4 h-4 sm:w-5 sm:h-5" /> 清理粪便 (10)
-          </button>
-          <button
-            onClick={upgradePen}
-            disabled={coins < upgradePenCost || level < upgradePenLevelReq}
-            className="bg-purple-500 hover:bg-purple-600 disabled:bg-slate-300 text-white px-4 py-2 sm:px-6 sm:py-3 rounded-xl flex items-center gap-1 sm:gap-2 text-sm sm:text-base font-bold shadow-sm transition-colors flex-1 sm:flex-none justify-center min-w-[120px]"
-          >
-            <Plus className="w-4 h-4 sm:w-5 sm:h-5" /> 扩建 ({upgradePenCost})
-            {level < upgradePenLevelReq && <span className="text-xs ml-1">(需Lv.{upgradePenLevelReq})</span>}
+            点击获取无限金币 (调试用)
           </button>
         </div>
 
@@ -264,6 +357,34 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* Full Screen Landscape View */}
+      {isFullScreenView && (
+        <div className="fixed inset-0 z-[100] bg-slate-950 flex items-center justify-center overflow-hidden">
+          <div className="absolute top-4 right-4 z-[110]">
+            <button 
+              onClick={() => setIsFullScreenView(false)}
+              className="bg-white/10 hover:bg-white/20 text-white p-3 rounded-full backdrop-blur-md transition-colors border border-white/10"
+            >
+              <X className="w-8 h-8" />
+            </button>
+          </div>
+          
+          {/* Landscape Rotation Hack for Portrait Devices */}
+          <div className="w-full h-full flex flex-col items-center justify-center p-4 portrait:rotate-90 portrait:w-[100vh] portrait:h-[100vw]">
+             <div className="absolute top-4 left-4 bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-white font-bold flex items-center gap-2">
+                <Maximize2 className="w-4 h-4" /> 羊圈面积: {penArea} ㎡
+             </div>
+             <div className="w-full h-full max-w-[95vmin] max-h-[95vmin] flex items-center justify-center">
+                <SheepPen isFullScreen />
+             </div>
+          </div>
+
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/40 text-xs font-medium pointer-events-none portrait:rotate-90 portrait:left-6 portrait:bottom-auto portrait:top-1/2 portrait:-translate-y-1/2 portrait:-translate-x-0">
+            横屏模式已开启 - 点击右上角关闭
+          </div>
+        </div>
+      )}
 
       {/* Developer Panel Modal */}
       {isDevPanelOpen && (
