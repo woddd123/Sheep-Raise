@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Sheep, useGameStore } from '../store/gameStore';
 import { Heart, Wheat, Droplets } from 'lucide-react';
+import { playBaa } from '../utils/audio';
 
 export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
   const timeOfDay = useGameStore(state => state.timeOfDay);
+  const soundEnabled = useGameStore(state => state.soundEnabled);
   const isNight = timeOfDay >= 19 || timeOfDay < 6;
   const isNightRef = useRef(isNight);
   useEffect(() => { isNightRef.current = isNight; }, [isNight]);
@@ -59,8 +61,8 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
     const interval = setInterval(() => {
       const { hunger, isNight, health, pos, facingRight, age, lastDefecatedAge } = defecateStateRef.current;
       
-      // 1 real second = 1 game tick = 0.25 in-game hours.
-      // 8 in-game hours = 32 game ticks.
+      // 1 real second = 1 game tick = 1 in-game minute.
+      // 32 in-game minutes = 32 game ticks.
       const canDefecate = (age - lastDefecatedAge >= 32) || lastDefecatedAge === 0;
 
       if (hunger > 80 && !isNight && health > 0 && !isDefecatingRef.current && canDefecate) {
@@ -91,6 +93,28 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
 
   const sheepRef = useRef(sheep);
   const troughCapacityRef = useRef(troughCapacity);
+
+  // Intermittent ambient sound
+  useEffect(() => {
+    if (isDead) return;
+    
+    let timeoutId: ReturnType<typeof setTimeout>;
+    
+    const scheduleNextBaa = () => {
+      // Random interval between 15s and 45s
+      const delay = 15000 + Math.random() * 30000;
+      timeoutId = setTimeout(() => {
+        if (!isDeadRef.current && !isNightRef.current && useGameStore.getState().soundEnabled) {
+          playBaa(0.1); // Lower volume for ambient sound
+        }
+        scheduleNextBaa();
+      }, delay);
+    };
+    
+    scheduleNextBaa();
+    
+    return () => clearTimeout(timeoutId);
+  }, [isDead]);
 
   // Calculate a fixed feeding spot near the bottom fence for this sheep
   const feedSpot = useRef({
@@ -181,6 +205,10 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
     if (isDead) {
       clearCorpse(sheep.id);
       return;
+    }
+
+    if (soundEnabled) {
+      playBaa(0.8); // Louder volume when clicked/hit
     }
 
     if (clickTimer.current) {
@@ -315,7 +343,7 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
               <style>{`rect { shape-rendering: crispEdges; }`}</style>
               
-              {/* Colors based on health */}
+              {/* Colors and Shapes based on health and stage */}
               {(() => {
                 const isCritical = sheep.health > 0 && sheep.health < 40;
                 const bodyColor = isCritical ? "#ffcccc" : "#ffffff";
@@ -327,74 +355,168 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
                 const hornShadow = "#b39865";
                 const hasHorns = sheep.gender === 'MALE';
                 
+                if (sheep.stage === 'BABY') {
+                  return (
+                    <>
+                      {/* Short Back Legs */}
+                      <rect x="9" y="18" width="2" height="2" fill={backLegColor}/>
+                      <rect x="15" y="18" width="2" height="2" fill={backLegColor}/>
+                      
+                      {/* Body Shadow */}
+                      <rect x="7" y="15" width="12" height="3" fill={bodyShadow}/>
+                      <rect x="6" y="14" width="14" height="3" fill={bodyShadow}/>
+                      
+                      {/* Very Round Fluffy Body */}
+                      <rect x="7" y="9" width="12" height="6" fill={bodyColor}/>
+                      <rect x="6" y="10" width="14" height="4" fill={bodyColor}/>
+                      <rect x="8" y="8" width="10" height="8" fill={bodyColor}/>
+                      
+                      {/* Short Front Legs */}
+                      <rect x="7" y="18" width="2" height="3" fill={legColor}/>
+                      <rect x="13" y="18" width="2" height="3" fill={legColor}/>
+                      
+                      {/* Cute Round Face */}
+                      <rect x="3" y="10" width="5" height="5" fill={headColor}/>
+                      <rect x="2" y="11" width="7" height="3" fill={headColor}/>
+                      
+                      {/* Big Eye */}
+                      {isDefecating ? (
+                        <rect x="4" y="11" width="2" height="1" fill="#ffffff"/>
+                      ) : !isNight ? (
+                        <>
+                          <rect x="3" y="11" width="2" height="2" fill="#ffffff"/>
+                          <rect x="3" y="11" width="1" height="1" fill="#000000"/>
+                        </>
+                      ) : (
+                        <rect x="3" y="12" width="2" height="1" fill="#111111"/>
+                      )}
+                      
+                      {/* Blushing Cheeks */}
+                      <rect x="5" y="13" width="2" height="1" fill="#ff9999"/>
+                      
+                      {/* Small Ear */}
+                      <rect x="6" y="12" width="2" height="1" fill="#111111"/>
+                    </>
+                  );
+                }
+                
+                if (sheep.stage === 'GROWING') {
+                  return (
+                    <>
+                      {/* Longer Back Legs */}
+                      <rect x="9" y="17" width="2" height="5" fill={backLegColor}/>
+                      <rect x="15" y="17" width="2" height="5" fill={backLegColor}/>
+                      
+                      {/* Body Shadow */}
+                      <rect x="7" y="14" width="12" height="3" fill={bodyShadow}/>
+                      
+                      {/* Slender Body */}
+                      <rect x="7" y="10" width="12" height="4" fill={bodyColor}/>
+                      <rect x="6" y="11" width="14" height="2" fill={bodyColor}/>
+                      
+                      {/* Longer Front Legs */}
+                      <rect x="7" y="18" width="2" height="5" fill={legColor}/>
+                      <rect x="13" y="18" width="2" height="5" fill={legColor}/>
+                      
+                      {/* Face */}
+                      <rect x="3" y="9" width="5" height="5" fill={headColor}/>
+                      <rect x="2" y="10" width="6" height="3" fill={headColor}/>
+                      
+                      {/* Small Horns for young male */}
+                      {hasHorns && (
+                        <>
+                          <rect x="5" y="7" width="1" height="2" fill={hornColor}/>
+                          <rect x="4" y="8" width="1" height="1" fill={hornColor}/>
+                        </>
+                      )}
+                      
+                      {/* Eye */}
+                      {isDefecating ? (
+                        <rect x="4" y="10" width="2" height="1" fill="#ffffff"/>
+                      ) : !isNight ? (
+                        <>
+                          <rect x="4" y="10" width="1" height="2" fill="#ffffff"/>
+                          <rect x="4" y="10" width="1" height="1" fill="#000000"/>
+                        </>
+                      ) : (
+                        <rect x="4" y="11" width="2" height="1" fill="#111111"/>
+                      )}
+                      
+                      {/* Ear */}
+                      <rect x="6" y="11" width="2" height="1" fill="#111111"/>
+                    </>
+                  );
+                }
+
+                // ADULT
                 return (
                   <>
-                    {/* Back Legs */}
-                    <rect x="8" y="18" width="2" height="4" fill={backLegColor}/>
-                    <rect x="16" y="18" width="2" height="4" fill={backLegColor}/>
+                    {/* Sturdy Back Legs */}
+                    <rect x="8" y="18" width="3" height="4" fill={backLegColor}/>
+                    <rect x="16" y="18" width="3" height="4" fill={backLegColor}/>
                     
-                    {/* Body Shadow */}
-                    <rect x="6" y="15" width="14" height="3" fill={bodyShadow}/>
-                    <rect x="5" y="13" width="2" height="3" fill={bodyShadow}/>
-                    <rect x="19" y="13" width="2" height="3" fill={bodyShadow}/>
+                    {/* Massive Fluffy Body Shadow */}
+                    <rect x="5" y="15" width="16" height="4" fill={bodyShadow}/>
+                    <rect x="4" y="13" width="2" height="4" fill={bodyShadow}/>
+                    <rect x="20" y="13" width="2" height="4" fill={bodyShadow}/>
                     
-                    {/* Body Fill */}
-                    <rect x="6" y="8" width="14" height="7" fill={bodyColor}/>
-                    <rect x="5" y="9" width="16" height="5" fill={bodyColor}/>
-                    <rect x="7" y="7" width="12" height="9" fill={bodyColor}/>
-                    <rect x="8" y="6" width="10" height="11" fill={bodyColor}/>
+                    {/* Massive Fluffy Body Fill */}
+                    <rect x="5" y="7" width="16" height="8" fill={bodyColor}/>
+                    <rect x="4" y="8" width="18" height="6" fill={bodyColor}/>
+                    <rect x="6" y="6" width="14" height="10" fill={bodyColor}/>
+                    <rect x="7" y="5" width="12" height="12" fill={bodyColor}/>
                     
                     {/* Wool Fluffs (Highlights) */}
-                    <rect x="7" y="7" width="2" height="2" fill="#ffffff"/>
-                    <rect x="11" y="6" width="3" height="2" fill="#ffffff"/>
-                    <rect x="16" y="7" width="2" height="2" fill="#ffffff"/>
+                    <rect x="7" y="6" width="2" height="2" fill="#ffffff"/>
+                    <rect x="12" y="5" width="3" height="2" fill="#ffffff"/>
+                    <rect x="17" y="6" width="2" height="2" fill="#ffffff"/>
                     
-                    {/* Front Legs */}
-                    <rect x="6" y="19" width="2" height="4" fill={legColor}/>
-                    <rect x="14" y="19" width="2" height="4" fill={legColor}/>
+                    {/* Sturdy Front Legs */}
+                    <rect x="6" y="19" width="3" height="4" fill={legColor}/>
+                    <rect x="14" y="19" width="3" height="4" fill={legColor}/>
                     
-                    {/* Head Base */}
-                    <rect x="2" y="8" width="5" height="6" fill={headColor}/>
-                    <rect x="1" y="9" width="6" height="4" fill={headColor}/>
-                    <rect x="3" y="14" width="3" height="2" fill={headColor}/>
+                    {/* Mature Face */}
+                    <rect x="1" y="8" width="6" height="7" fill={headColor}/>
+                    <rect x="0" y="10" width="7" height="4" fill={headColor}/>
+                    <rect x="2" y="15" width="4" height="2" fill={headColor}/>
                     
                     {/* Snout Highlight */}
-                    <rect x="1" y="11" width="2" height="1" fill="#3a3a3a"/>
+                    <rect x="0" y="12" width="2" height="1" fill="#3a3a3a"/>
                     
                     {/* Horns (Male Only) */}
                     {hasHorns && (
                       <>
                         {/* Front Horn */}
-                        <rect x="4" y="5" width="2" height="3" fill={hornColor}/>
-                        <rect x="3" y="4" width="2" height="1" fill={hornColor}/>
-                        <rect x="2" y="5" width="1" height="2" fill={hornColor}/>
-                        <rect x="2" y="7" width="2" height="1" fill={hornShadow}/>
-                        <rect x="5" y="6" width="1" height="2" fill={hornShadow}/>
+                        <rect x="3" y="4" width="3" height="4" fill={hornColor}/>
+                        <rect x="2" y="3" width="3" height="2" fill={hornColor}/>
+                        <rect x="1" y="4" width="2" height="3" fill={hornColor}/>
+                        <rect x="1" y="7" width="3" height="2" fill={hornShadow}/>
+                        <rect x="4" y="6" width="2" height="2" fill={hornShadow}/>
                         
-                        {/* Back Horn (Partially hidden) */}
-                        <rect x="6" y="4" width="2" height="2" fill={hornShadow}/>
-                        <rect x="7" y="6" width="1" height="1" fill={hornShadow}/>
+                        {/* Back Horn */}
+                        <rect x="6" y="3" width="2" height="3" fill={hornShadow}/>
+                        <rect x="7" y="6" width="2" height="2" fill={hornShadow}/>
                       </>
                     )}
+                    
+                    {/* Eye */}
+                    {isDefecating ? (
+                      <rect x="2" y="9" width="2" height="1" fill="#ffffff"/>
+                    ) : !isNight ? (
+                      <>
+                        <rect x="2" y="9" width="2" height="2" fill="#ffffff"/>
+                        <rect x="2" y="9" width="1" height="1" fill="#000000"/>
+                      </>
+                    ) : (
+                      <rect x="2" y="10" width="2" height="1" fill="#111111"/>
+                    )}
+                    
+                    {/* Ear */}
+                    <rect x="5" y="11" width="3" height="1" fill="#111111"/>
+                    <rect x="6" y="12" width="2" height="1" fill="#111111"/>
                   </>
                 );
               })()}
-              
-              {/* Eye */}
-              {isDefecating ? (
-                <rect x="3" y="9" width="2" height="1" fill="#ffffff"/>
-              ) : !isNight ? (
-                <>
-                  <rect x="3" y="9" width="2" height="2" fill="#ffffff"/>
-                  <rect x="3" y="9" width="1" height="1" fill="#000000"/>
-                </>
-              ) : (
-                <rect x="3" y="10" width="2" height="1" fill="#111111"/>
-              )}
-              
-              {/* Ear */}
-              <rect x="5" y="11" width="2" height="1" fill="#111111"/>
-              <rect x="6" y="12" width="1" height="1" fill="#111111"/>
             </svg>
           </motion.div>
         </div>

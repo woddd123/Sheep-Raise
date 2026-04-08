@@ -29,6 +29,8 @@ interface GameState {
   troughCapacity: number;
   maxTroughCapacity: number;
   timeOfDay: number; // 0 to 24 hours
+  timeSpeed: number; // Multiplier for time passage
+  dayCount: number; // Number of days passed
   
   // Actions
   fillTrough: () => void;
@@ -46,6 +48,8 @@ interface GameState {
   breedSheep: (id: string) => void;
   sellWool: () => void;
   devSetState: (newState: Partial<GameState>) => void;
+  soundEnabled: boolean;
+  setSoundEnabled: (enabled: boolean) => void;
 }
 
 export const useGameStore = create<GameState>()(
@@ -65,7 +69,11 @@ export const useGameStore = create<GameState>()(
       troughCapacity: 0,
       maxTroughCapacity: 100,
       timeOfDay: 8, // Start at 8:00 AM
+      timeSpeed: 1,
+      dayCount: 1,
+      soundEnabled: true,
 
+      setSoundEnabled: (enabled) => set({ soundEnabled: enabled }),
       devSetState: (newState) => set((state) => ({ ...state, ...newState })),
 
       fillTrough: () => set((state) => {
@@ -225,12 +233,14 @@ export const useGameStore = create<GameState>()(
 
         const isNight = state.timeOfDay >= 19 || state.timeOfDay < 6;
         const hungerDecayRate = isNight ? 0.2 : 1; // Hunger decays 5x slower at night
+        
+        const effectiveTicks = ticksPassed * (state.timeSpeed || 1);
 
         const updatedSheep = state.sheepList.map(sheep => {
           if (sheep.health <= 0) return sheep; // Dead sheep don't change
           
           // Decrease stats over time
-          const newHunger = Math.max(0, sheep.hunger - (ticksPassed * hungerDecayRate));
+          const newHunger = Math.max(0, sheep.hunger - (effectiveTicks * hungerDecayRate));
           
           // Health decreases if hungry
           let healthDelta = 0;
@@ -239,26 +249,31 @@ export const useGameStore = create<GameState>()(
 
           let newWoolGrowth = sheep.woolGrowth || 0;
           if (sheep.stage === 'ADULT') {
-            newWoolGrowth = Math.min(100, newWoolGrowth + (ticksPassed * 0.5));
+            newWoolGrowth = Math.min(100, newWoolGrowth + (effectiveTicks * 0.5));
           }
 
           return {
             ...sheep,
-            age: sheep.age + ticksPassed,
+            age: sheep.age + effectiveTicks,
             hunger: newHunger,
-            health: Math.max(0, Math.min(100, sheep.health + (healthDelta * ticksPassed))),
-            stage: (sheep.age + ticksPassed > 1920 ? 'ADULT' : sheep.age + ticksPassed > 960 ? 'GROWING' : 'BABY') as SheepStage,
+            health: Math.max(0, Math.min(100, sheep.health + (healthDelta * effectiveTicks))),
+            stage: (sheep.age + effectiveTicks > 1920 ? 'ADULT' : sheep.age + effectiveTicks > 960 ? 'GROWING' : 'BABY') as SheepStage,
             woolGrowth: newWoolGrowth,
             lastBredAge: sheep.lastBredAge || 0
           };
         });
 
-        const newTimeOfDay = (state.timeOfDay + ticksPassed * 0.25) % 24; // 1 real second = 15 in-game minutes
+        const timeIncrement = effectiveTicks * (1 / 60); // 1 real second = 1 game minute (1/60 hour)
+        const totalTime = state.timeOfDay + timeIncrement;
+        const newTimeOfDay = totalTime % 24;
+        const daysPassed = Math.floor(totalTime / 24);
+        const newDayCount = (state.dayCount || 1) + daysPassed;
 
         return {
           sheepList: updatedSheep,
           lastTick: now,
-          timeOfDay: newTimeOfDay
+          timeOfDay: newTimeOfDay,
+          dayCount: newDayCount
         };
       }),
     }),

@@ -19,21 +19,52 @@ export function SheepPen() {
           className="relative w-full h-full rounded-2xl overflow-hidden bg-transparent"
         >
         {/* Fence Overlay */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none z-40" style={{ imageRendering: 'pixelated' }}>
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-40" style={{ imageRendering: 'pixelated', shapeRendering: 'crispEdges' }}>
           <defs>
             {/* Top/Bottom Fence Pattern */}
-            <pattern id="fence-h" x="0" y="0" width="16" height="32" patternUnits="userSpaceOnUse">
-              <rect x="0" y="12" width="16" height="4" fill="#5c3a18" />
-              <rect x="0" y="20" width="16" height="4" fill="#5c3a18" />
-              <rect x="2" y="2" width="12" height="28" rx="2" fill="#8b5a2b" stroke="#5c3a18" strokeWidth="2"/>
-              <line x1="6" y1="4" x2="6" y2="28" stroke="#a06a38" strokeWidth="2"/>
+            <pattern id="fence-h" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+              {/* Horizontal Rails Outline */}
+              <rect x="0" y="8" width="24" height="8" fill="#000000" />
+              {/* Horizontal Rails Fill */}
+              <rect x="0" y="10" width="24" height="4" fill="#c07c40" />
+              {/* Horizontal Rails Shadow/Grain */}
+              <rect x="0" y="12" width="24" height="2" fill="#8a5020" />
+              
+              {/* Vertical Post Outline */}
+              <rect x="6" y="2" width="12" height="20" fill="#000000" />
+              {/* Vertical Post Fill */}
+              <rect x="8" y="4" width="8" height="16" fill="#c07c40" />
+              {/* Vertical Post Shadow/Grain */}
+              <rect x="12" y="4" width="4" height="16" fill="#8a5020" />
+              <rect x="8" y="16" width="8" height="4" fill="#8a5020" />
+              <rect x="8" y="4" width="2" height="2" fill="#e8a870" />
+              
+              {/* Nail */}
+              <rect x="10" y="10" width="4" height="4" fill="#000000" />
+              <rect x="10" y="10" width="2" height="2" fill="#666666" />
             </pattern>
             
             {/* Left/Right Fence Pattern */}
-            <pattern id="fence-v" x="0" y="0" width="32" height="24" patternUnits="userSpaceOnUse">
-              <rect x="14" y="0" width="4" height="24" fill="#5c3a18" />
-              <rect x="10" y="2" width="12" height="20" rx="2" fill="#8b5a2b" stroke="#5c3a18" strokeWidth="2"/>
-              <line x1="14" y1="4" x2="14" y2="20" stroke="#a06a38" strokeWidth="2"/>
+            <pattern id="fence-v" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+              {/* Vertical Rails Outline */}
+              <rect x="8" y="0" width="8" height="24" fill="#000000" />
+              {/* Vertical Rails Fill */}
+              <rect x="10" y="0" width="4" height="24" fill="#c07c40" />
+              {/* Vertical Rails Shadow/Grain */}
+              <rect x="12" y="0" width="2" height="24" fill="#8a5020" />
+              
+              {/* Horizontal Post Outline */}
+              <rect x="2" y="6" width="20" height="12" fill="#000000" />
+              {/* Horizontal Post Fill */}
+              <rect x="4" y="8" width="16" height="8" fill="#c07c40" />
+              {/* Horizontal Post Shadow/Grain */}
+              <rect x="4" y="12" width="16" height="4" fill="#8a5020" />
+              <rect x="16" y="8" width="4" height="8" fill="#8a5020" />
+              <rect x="4" y="8" width="2" height="2" fill="#e8a870" />
+              
+              {/* Nail */}
+              <rect x="10" y="10" width="4" height="4" fill="#000000" />
+              <rect x="10" y="10" width="2" height="2" fill="#666666" />
             </pattern>
           </defs>
           
@@ -49,11 +80,40 @@ export function SheepPen() {
           <rect x="0" y="100%" width="100%" height="24" fill="url(#fence-h)" transform="translate(0, -24)" />
           
           {/* Corner Posts */}
-          <g stroke="#5c3a18" strokeWidth="2">
-            <rect x="0" y="0" width="24" height="24" rx="2" fill="#8b5a2b" />
-            <rect x="100%" y="0" width="24" height="24" rx="2" fill="#8b5a2b" transform="translate(-24, 0)" />
-            <rect x="0" y="100%" width="24" height="24" rx="2" fill="#8b5a2b" transform="translate(0, -24)" />
-            <rect x="100%" y="100%" width="24" height="24" rx="2" fill="#8b5a2b" transform="translate(-24, -24)" />
+          <g>
+            {/* Top Left */}
+            <rect x="2" y="2" width="20" height="20" fill="#000000" />
+            <rect x="4" y="4" width="16" height="16" fill="#c07c40" />
+            <rect x="12" y="4" width="8" height="16" fill="#8a5020" />
+            <rect x="4" y="12" width="16" height="8" fill="#8a5020" />
+            <rect x="4" y="4" width="4" height="4" fill="#e8a870" />
+            
+            {/* Top Right */}
+            <g transform="translate(100%, 0) translate(-24, 0)">
+              <rect x="2" y="2" width="20" height="20" fill="#000000" />
+              <rect x="4" y="4" width="16" height="16" fill="#c07c40" />
+              <rect x="12" y="4" width="8" height="16" fill="#8a5020" />
+              <rect x="4" y="12" width="16" height="8" fill="#8a5020" />
+              <rect x="4" y="4" width="4" height="4" fill="#e8a870" />
+            </g>
+            
+            {/* Bottom Left */}
+            <g transform="translate(0, 100%) translate(0, -24)">
+              <rect x="2" y="2" width="20" height="20" fill="#000000" />
+              <rect x="4" y="4" width="16" height="16" fill="#c07c40" />
+              <rect x="12" y="4" width="8" height="16" fill="#8a5020" />
+              <rect x="4" y="12" width="16" height="8" fill="#8a5020" />
+              <rect x="4" y="4" width="4" height="4" fill="#e8a870" />
+            </g>
+            
+            {/* Bottom Right */}
+            <g transform="translate(100%, 100%) translate(-24, -24)">
+              <rect x="2" y="2" width="20" height="20" fill="#000000" />
+              <rect x="4" y="4" width="16" height="16" fill="#c07c40" />
+              <rect x="12" y="4" width="8" height="16" fill="#8a5020" />
+              <rect x="4" y="12" width="16" height="8" fill="#8a5020" />
+              <rect x="4" y="4" width="4" height="4" fill="#e8a870" />
+            </g>
           </g>
         </svg>
         {/* Gate */}
@@ -63,22 +123,62 @@ export function SheepPen() {
         >
           {/* Left Door */}
           <div className={`w-8 h-full relative origin-top-left transition-transform duration-500 ${isGateOpen ? '-rotate-90' : 'rotate-0'}`}>
-             <svg width="100%" height="100%" style={{ imageRendering: 'pixelated', overflow: 'visible' }}>
-               <rect x="0" y="10" width="32" height="4" fill="#6b4423" />
-               <rect x="0" y="22" width="32" height="4" fill="#6b4423" />
-               <rect x="2" y="2" width="12" height="28" rx="2" fill="#a06a38" stroke="#4a2e12" strokeWidth="2"/>
-               <rect x="18" y="2" width="12" height="28" rx="2" fill="#a06a38" stroke="#4a2e12" strokeWidth="2"/>
-               <line x1="2" y1="4" x2="30" y2="28" stroke="#6b4423" strokeWidth="3" />
+             <svg width="100%" height="100%" style={{ imageRendering: 'pixelated', shapeRendering: 'crispEdges', overflow: 'visible' }}>
+               {/* Horizontal Rails Outline */}
+               <rect x="0" y="8" width="32" height="8" fill="#000000" />
+               {/* Horizontal Rails Fill */}
+               <rect x="0" y="10" width="32" height="4" fill="#c07c40" />
+               {/* Horizontal Rails Shadow/Grain */}
+               <rect x="0" y="12" width="32" height="2" fill="#8a5020" />
+               
+               {/* Diagonal cross brace */}
+               <line x1="4" y1="10" x2="28" y2="22" stroke="#000000" strokeWidth="6" />
+               <line x1="4" y1="10" x2="28" y2="22" stroke="#c07c40" strokeWidth="4" />
+               <line x1="4" y1="12" x2="28" y2="24" stroke="#8a5020" strokeWidth="2" />
+
+               {/* Left Post */}
+               <rect x="2" y="2" width="12" height="20" fill="#000000" />
+               <rect x="4" y="4" width="8" height="16" fill="#c07c40" />
+               <rect x="8" y="4" width="4" height="16" fill="#8a5020" />
+               <rect x="4" y="16" width="8" height="4" fill="#8a5020" />
+               <rect x="4" y="4" width="2" height="2" fill="#e8a870" />
+               
+               {/* Right Post */}
+               <rect x="18" y="2" width="12" height="20" fill="#000000" />
+               <rect x="20" y="4" width="8" height="16" fill="#c07c40" />
+               <rect x="24" y="4" width="4" height="16" fill="#8a5020" />
+               <rect x="20" y="16" width="8" height="4" fill="#8a5020" />
+               <rect x="20" y="4" width="2" height="2" fill="#e8a870" />
              </svg>
           </div>
           {/* Right Door */}
           <div className={`w-8 h-full relative origin-top-right transition-transform duration-500 ${isGateOpen ? 'rotate-90' : 'rotate-0'}`}>
-             <svg width="100%" height="100%" style={{ imageRendering: 'pixelated', overflow: 'visible' }}>
-               <rect x="0" y="10" width="32" height="4" fill="#6b4423" />
-               <rect x="0" y="22" width="32" height="4" fill="#6b4423" />
-               <rect x="2" y="2" width="12" height="28" rx="2" fill="#a06a38" stroke="#4a2e12" strokeWidth="2"/>
-               <rect x="18" y="2" width="12" height="28" rx="2" fill="#a06a38" stroke="#4a2e12" strokeWidth="2"/>
-               <line x1="30" y1="4" x2="2" y2="28" stroke="#6b4423" strokeWidth="3" />
+             <svg width="100%" height="100%" style={{ imageRendering: 'pixelated', shapeRendering: 'crispEdges', overflow: 'visible' }}>
+               {/* Horizontal Rails Outline */}
+               <rect x="0" y="8" width="32" height="8" fill="#000000" />
+               {/* Horizontal Rails Fill */}
+               <rect x="0" y="10" width="32" height="4" fill="#c07c40" />
+               {/* Horizontal Rails Shadow/Grain */}
+               <rect x="0" y="12" width="32" height="2" fill="#8a5020" />
+               
+               {/* Diagonal cross brace */}
+               <line x1="28" y1="10" x2="4" y2="22" stroke="#000000" strokeWidth="6" />
+               <line x1="28" y1="10" x2="4" y2="22" stroke="#c07c40" strokeWidth="4" />
+               <line x1="28" y1="12" x2="4" y2="24" stroke="#8a5020" strokeWidth="2" />
+
+               {/* Left Post */}
+               <rect x="2" y="2" width="12" height="20" fill="#000000" />
+               <rect x="4" y="4" width="8" height="16" fill="#c07c40" />
+               <rect x="8" y="4" width="4" height="16" fill="#8a5020" />
+               <rect x="4" y="16" width="8" height="4" fill="#8a5020" />
+               <rect x="4" y="4" width="2" height="2" fill="#e8a870" />
+               
+               {/* Right Post */}
+               <rect x="18" y="2" width="12" height="20" fill="#000000" />
+               <rect x="20" y="4" width="8" height="16" fill="#c07c40" />
+               <rect x="24" y="4" width="4" height="16" fill="#8a5020" />
+               <rect x="20" y="16" width="8" height="4" fill="#8a5020" />
+               <rect x="20" y="4" width="2" height="2" fill="#e8a870" />
              </svg>
           </div>
         </div>
@@ -113,16 +213,16 @@ export function SheepPen() {
         <div className="absolute z-50" style={{ left: '50%', bottom: '-16px', transform: 'translateX(-50%)' }}>
           <div className="relative w-40 h-14">
             <div className="absolute -bottom-1 left-2 w-36 h-4 bg-black/30 rounded-full blur-sm" />
-            <div className="absolute inset-0 bg-[#8b5a2b] border-4 border-b-0 border-[#5c3a18] rounded-t-lg flex items-end overflow-hidden">
+            <div className="absolute inset-0 bg-[#c07c40] border-4 border-b-0 border-black flex items-end overflow-hidden" style={{ imageRendering: 'pixelated' }}>
               <div 
-                className="w-full bg-[#e6c280] transition-all duration-500"
+                className="w-full bg-[#e6c280] transition-all duration-500 border-t-4 border-black"
                 style={{ height: `${(troughCapacity / maxTroughCapacity) * 100}%` }}
               >
                 <div className="w-full h-full opacity-30" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, #c49a45 4px, #c49a45 8px)' }} />
               </div>
             </div>
-            <div className="absolute inset-0 border-4 border-[#5c3a18] rounded-lg pointer-events-none" />
-            <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white drop-shadow-md pointer-events-none z-10">
+            <div className="absolute inset-0 border-4 border-black pointer-events-none" />
+            <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white drop-shadow-[0_2px_0_rgba(0,0,0,1)] pointer-events-none z-10">
               {Math.round(troughCapacity)}/{maxTroughCapacity}
             </div>
           </div>

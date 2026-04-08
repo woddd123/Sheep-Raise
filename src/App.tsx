@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { useGameStore } from './store/gameStore';
-import { Droplets, Wheat, Heart, Coins, Star, Plus, Moon, Sun, Wrench, X, Maximize2 } from 'lucide-react';
+import { Droplets, Wheat, Heart, Coins, Star, Plus, Moon, Sun, Wrench, X, Maximize2, Volume2, VolumeX } from 'lucide-react';
 import { SheepPen } from './components/SheepPen';
+import { initAudio, playBaa } from './utils/audio';
 
 export default function App() {
-  const { level, exp, coins, sheepList, gameTick, addSheep, fillTrough, cleanAll, troughCapacity, maxTroughCapacity, addCoins, upgradeTrough, timeOfDay, feces, penLevel, upgradePen, sellSheep, shearSheep, breedSheep, devSetState, wool } = useGameStore();
+  const { level, exp, coins, sheepList, gameTick, addSheep, fillTrough, cleanAll, troughCapacity, maxTroughCapacity, addCoins, upgradeTrough, timeOfDay, feces, penLevel, upgradePen, sellSheep, shearSheep, breedSheep, devSetState, wool, timeSpeed, dayCount, soundEnabled, setSoundEnabled } = useGameStore();
 
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
 
@@ -56,12 +57,31 @@ export default function App() {
     return () => clearInterval(interval);
   }, [gameTick]);
 
+  // Init audio on first interaction
+  useEffect(() => {
+    const handleFirstInteraction = async () => {
+      if (soundEnabled) {
+        await initAudio();
+      }
+      window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('keydown', handleFirstInteraction);
+    };
+    window.addEventListener('click', handleFirstInteraction);
+    window.addEventListener('keydown', handleFirstInteraction);
+    return () => {
+      window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('keydown', handleFirstInteraction);
+    };
+  }, [soundEnabled]);
+
   return (
     <div className="min-h-screen bg-[#7ec850] text-slate-800 font-sans pb-20 relative">
       {/* Top Header for Time and Progress */}
       <div className="fixed top-4 left-0 right-0 z-50 px-4 pointer-events-none flex items-center justify-between gap-4">
-        {/* Empty space to balance the right side if needed, or just let justify-between handle it */}
-        <div className="hidden md:block w-24" /> 
+        {/* Day Display */}
+        <div className="bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-white/40 flex items-center gap-2 font-mono text-sm pointer-events-auto font-bold text-slate-700">
+          第 {dayCount || 1} 天
+        </div>
 
         {/* Floating Stick Time Progress Bar */}
         <div className="relative flex-1 max-w-xl h-3">
@@ -118,6 +138,22 @@ export default function App() {
           {isNight ? <Moon className="w-4 h-4 text-indigo-500" /> : <Sun className="w-4 h-4 text-orange-500" />}
           {timeString}
         </div>
+
+        {/* Sound Toggle */}
+        <button
+          onClick={async () => {
+            const newState = !soundEnabled;
+            setSoundEnabled(newState);
+            if (newState) {
+              await initAudio();
+              playBaa(0.3);
+            }
+          }}
+          className="bg-white/80 backdrop-blur-sm p-1.5 rounded-full shadow-sm border border-white/40 text-slate-700 hover:bg-white transition-colors pointer-events-auto"
+          title={soundEnabled ? "关闭声音" : "开启声音"}
+        >
+          {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+        </button>
       </div>
 
       {/* Environmental Lighting Overlays (Full Screen) */}
@@ -438,6 +474,23 @@ export default function App() {
                   className="w-full"
                 />
                 <div className="text-right text-xs text-slate-500 mt-1">{timeOfDay.toFixed(1)}</div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">时间流速 (Time Speed)</label>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="100" 
+                  step="1"
+                  value={timeSpeed || 1} 
+                  onChange={(e) => devSetState({ timeSpeed: Number(e.target.value) })}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-slate-500 mt-1">
+                  <span>暂停 (0x)</span>
+                  <span>{timeSpeed || 1}x</span>
+                  <span>极速 (100x)</span>
+                </div>
               </div>
             </div>
           </div>
