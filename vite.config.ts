@@ -7,11 +7,15 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
+    base: './',
     plugins: [
       react(), 
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,mp3}'],
+        },
         manifest: {
           name: 'Sheep Farm Simulator',
           short_name: 'SheepFarm',

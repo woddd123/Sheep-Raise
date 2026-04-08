@@ -45,10 +45,14 @@ export const initAudio = async () => {
       for (const url of AUDIO_URLS) {
         try {
           const response = await fetch(url);
-          if (!response.ok) continue;
+          if (!response.ok) {
+            console.warn(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+            continue;
+          }
           const arrayBuffer = await response.arrayBuffer();
           sheepBuffer = await decodeAudio(audioCtx, arrayBuffer);
           loaded = true;
+          console.log(`Successfully loaded audio from: ${url}`);
           break; // Successfully loaded and decoded
         } catch (err) {
           console.warn(`Failed to load/decode ${url}:`, err);
