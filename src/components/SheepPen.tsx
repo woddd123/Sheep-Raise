@@ -2,33 +2,18 @@ import { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { SheepEntity } from './SheepEntity';
 
-export function SheepPen({ isFullScreen = false }: { isFullScreen?: boolean }) {
+export function SheepPen() {
   const sheepList = useGameStore(state => state.sheepList);
   const troughCapacity = useGameStore(state => state.troughCapacity);
   const maxTroughCapacity = useGameStore(state => state.maxTroughCapacity);
   const feces = useGameStore(state => state.feces);
-  const penLevel = useGameStore(state => state.penLevel);
   const [isGateOpen, setIsGateOpen] = useState(false);
 
-  // Map penLevel to width for Full Screen mode
-  const actualWidth = 
-    !penLevel || penLevel === 1 ? 'w-[500px]' :
-    penLevel === 2 ? 'w-[600px]' :
-    penLevel === 3 ? 'w-[700px]' :
-    penLevel === 4 ? 'w-[800px]' :
-    penLevel === 5 ? 'w-[900px]' :
-    penLevel === 6 ? 'w-[1000px]' :
-    penLevel === 7 ? 'w-[1100px]' :
-    penLevel === 8 ? 'w-[1200px]' :
-    'w-[1400px]';
-
-  // Main view is always a fixed square, Full screen uses actual width
-  const penContainerClass = isFullScreen 
-    ? `${actualWidth} h-[80vh]` 
-    : 'w-[90vw] max-w-[400px] h-[90vw] max-h-[400px]';
+  // Main view is always a fixed square
+  const penContainerClass = 'w-[90vw] max-w-[400px] h-[90vw] max-h-[400px]';
 
   return (
-    <div className={`flex justify-center items-center w-full ${isFullScreen ? 'h-full p-8' : 'min-h-[300px] mb-8 mt-4'}`}>
+    <div className="flex justify-center items-center w-full min-h-[300px] mb-8 mt-4">
       <div className={`relative ${penContainerClass} transition-all duration-500 ease-in-out`}>
         <div 
           className="relative w-full h-full rounded-2xl overflow-hidden bg-transparent"

@@ -8,7 +8,6 @@ export default function App() {
   const { level, exp, coins, sheepList, gameTick, addSheep, fillTrough, cleanAll, troughCapacity, maxTroughCapacity, addCoins, upgradeTrough, timeOfDay, feces, penLevel, upgradePen, sellSheep, shearSheep, breedSheep, devSetState, wool } = useGameStore();
 
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
-  const [isFullScreenView, setIsFullScreenView] = useState(false);
 
   const maxSheep = 4 + (penLevel || 1) * 4;
   const upgradePenCost = (penLevel || 1) * 500;
@@ -170,13 +169,6 @@ export default function App() {
           <div className="w-full flex justify-center">
             <SheepPen />
           </div>
-          
-          <button 
-            onClick={() => setIsFullScreenView(true)}
-            className="bg-indigo-600/90 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-lg transition-all flex items-center gap-2 active:scale-95 backdrop-blur-sm"
-          >
-            <Maximize2 className="w-4 h-4" /> 查看完整羊圈
-          </button>
         </div>
 
         {/* Management Panel (我的牧场) */}
@@ -357,34 +349,6 @@ export default function App() {
           </div>
         </div>
       </main>
-
-      {/* Full Screen Landscape View */}
-      {isFullScreenView && (
-        <div className="fixed inset-0 z-[100] bg-slate-950 flex items-center justify-center overflow-hidden">
-          <div className="absolute top-4 right-4 z-[110]">
-            <button 
-              onClick={() => setIsFullScreenView(false)}
-              className="bg-white/10 hover:bg-white/20 text-white p-3 rounded-full backdrop-blur-md transition-colors border border-white/10"
-            >
-              <X className="w-8 h-8" />
-            </button>
-          </div>
-          
-          {/* Landscape Rotation Hack for Portrait Devices */}
-          <div className="w-full h-full flex flex-col items-center justify-center p-4 portrait:rotate-90 portrait:w-[100vh] portrait:h-[100vw]">
-             <div className="absolute top-4 left-4 bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-white font-bold flex items-center gap-2">
-                <Maximize2 className="w-4 h-4" /> 羊圈面积: {penArea} ㎡
-             </div>
-             <div className="w-full h-full max-w-[95vmin] max-h-[95vmin] flex items-center justify-center">
-                <SheepPen isFullScreen />
-             </div>
-          </div>
-
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/40 text-xs font-medium pointer-events-none portrait:rotate-90 portrait:left-6 portrait:bottom-auto portrait:top-1/2 portrait:-translate-y-1/2 portrait:-translate-x-0">
-            横屏模式已开启 - 点击右上角关闭
-          </div>
-        </div>
-      )}
 
       {/* Developer Panel Modal */}
       {isDevPanelOpen && (
