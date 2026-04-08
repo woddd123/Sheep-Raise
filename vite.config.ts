@@ -8,6 +8,9 @@ export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
     base: './',
+    build: {
+      assetsInlineLimit: 100000, // Inline assets up to 100KB (our mp3 is ~14KB)
+    },
     plugins: [
       react(), 
       tailwindcss(),
