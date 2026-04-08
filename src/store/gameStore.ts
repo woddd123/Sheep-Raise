@@ -85,6 +85,17 @@ export const useGameStore = create<GameState>()(
         };
       }),
 
+      upgradePen: () => set((state) => {
+        const penLevel = state.penLevel || 1;
+        const upgradeCost = penLevel * 500;
+        const levelReq = penLevel * 2;
+        if (state.coins < upgradeCost || state.level < levelReq) return state;
+        return {
+          coins: state.coins - upgradeCost,
+          penLevel: penLevel + 1
+        };
+      }),
+
       eatFromTrough: (id) => set((state) => {
         if (state.troughCapacity <= 0) return state;
         const sheep = state.sheepList.find(s => s.id === id);
@@ -236,7 +247,7 @@ export const useGameStore = create<GameState>()(
             age: sheep.age + ticksPassed,
             hunger: newHunger,
             health: Math.max(0, Math.min(100, sheep.health + (healthDelta * ticksPassed))),
-            stage: sheep.age > 1920 ? 'ADULT' : sheep.age > 960 ? 'GROWING' : 'BABY',
+            stage: (sheep.age + ticksPassed > 1920 ? 'ADULT' : sheep.age + ticksPassed > 960 ? 'GROWING' : 'BABY') as SheepStage,
             woolGrowth: newWoolGrowth,
             lastBredAge: sheep.lastBredAge || 0
           };

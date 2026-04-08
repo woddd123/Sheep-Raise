@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Sheep, useGameStore } from '../store/gameStore';
 import { Heart, Wheat, Droplets } from 'lucide-react';
 
-export function SheepEntity({ sheep }: { sheep: Sheep }) {
+export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
   const timeOfDay = useGameStore(state => state.timeOfDay);
   const isNight = timeOfDay >= 19 || timeOfDay < 6;
   const isNightRef = useRef(isNight);
@@ -24,6 +24,8 @@ export function SheepEntity({ sheep }: { sheep: Sheep }) {
   const [isKnockedBack, setIsKnockedBack] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [isDefecating, setIsDefecating] = useState(false);
+  const [showStatus, setShowStatus] = useState(false);
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isDefecatingRef = useRef(false);
 
   // Defecation logic
@@ -177,6 +179,21 @@ export function SheepEntity({ sheep }: { sheep: Sheep }) {
       return;
     }
 
+    if (clickTimer.current) {
+      // Double click detected
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+      performKnockback(e);
+    } else {
+      // Single click potential
+      clickTimer.current = setTimeout(() => {
+        setShowStatus(prev => !prev);
+        clickTimer.current = null;
+      }, 250); // 250ms window for double click
+    }
+  };
+
+  const performKnockback = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const sheepCenterX = rect.left + rect.width / 2;
     const sheepCenterY = rect.top + rect.height / 2;
@@ -247,11 +264,11 @@ export function SheepEntity({ sheep }: { sheep: Sheep }) {
 
         {/* Hover Status HUD */}
         {isDead ? (
-          <div className="absolute -top-12 bg-white/95 px-3 py-2 rounded-lg text-xs font-bold shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap border border-red-200 text-red-600">
+          <div className={`absolute -top-12 bg-white/95 px-3 py-2 rounded-lg text-xs font-bold shadow-xl transition-opacity pointer-events-none z-50 whitespace-nowrap border border-red-200 text-red-600 ${showStatus ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
             小羊死去了... 点击清除
           </div>
         ) : (
-          <div className="absolute -top-28 bg-white/95 px-3 py-2 rounded-lg text-xs font-bold shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 flex flex-col gap-1 whitespace-nowrap border border-slate-200">
+          <div className={`absolute -top-28 bg-white/95 px-3 py-2 rounded-lg text-xs font-bold shadow-xl transition-opacity pointer-events-none z-50 flex flex-col gap-1 whitespace-nowrap border border-slate-200 ${showStatus ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
             <div className="text-slate-800 text-sm border-b border-slate-200 pb-1 mb-1">
               {sheep.name} {sheep.gender === 'MALE' ? '♂️' : '♀️'} ({sheep.stage === 'BABY' ? '幼崽' : sheep.stage === 'GROWING' ? '成长期' : '成年'})
             </div>
