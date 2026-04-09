@@ -232,7 +232,7 @@ export const useGameStore = create<GameState>()(
         if (ticksPassed <= 0) return state;
 
         const isNight = state.timeOfDay >= 19 || state.timeOfDay < 6;
-        const hungerDecayRate = isNight ? 0.2 : 1; // Hunger decays 5x slower at night
+        const hungerDecayRate = isNight ? (0.2 / 30) : (1 / 30); // Hunger decays 1 point per 30s (day), 0.2 points per 30s (night)
         
         const effectiveTicks = ticksPassed * (state.timeSpeed || 1);
 
