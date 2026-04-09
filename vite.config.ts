@@ -9,7 +9,7 @@ export default defineConfig(({mode}) => {
   return {
     base: './',
     build: {
-      assetsInlineLimit: 100000, // Inline assets up to 100KB (our mp3 is ~14KB)
+      assetsInlineLimit: 200000, // Inline assets up to 200KB (our mp3 is ~105KB)
     },
     plugins: [
       react(), 
