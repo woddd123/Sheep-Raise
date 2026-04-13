@@ -17,6 +17,20 @@ export interface Sheep {
   lastDefecatedAge?: number;
 }
 
+export interface GrassDecoration {
+  id: string;
+  x: number;
+  y: number;
+  scale: number;
+}
+
+export interface Fence {
+  id: string;
+  x: number;
+  y: number;
+  rotation: number; // 0, 90, 180, 270 degrees
+}
+
 interface GameState {
   level: number;
   penLevel: number;
@@ -25,20 +39,32 @@ interface GameState {
   wool: number;
   sheepList: Sheep[];
   feces: { id: string, x: number, y: number }[];
+  grassTrails: { id: string, x: number, y: number, timestamp: number }[];
+  grassDecorations: GrassDecoration[];
+  fences: Fence[];
+  buildMode: boolean;
   lastTick: number;
-  troughCapacity: number;
-  maxTroughCapacity: number;
   timeOfDay: number; // 0 to 24 hours
   timeSpeed: number; // Multiplier for time passage
   dayCount: number; // Number of days passed
-  
+  weather: 'sunny' | 'rainy' | 'windy';
+  windDirection: number; // 0-360 degrees
+  windStrength: number; // 0-100
+  weatherEndTime: number; // Timestamp when weather ends
+
   // Actions
-  fillTrough: () => void;
-  upgradeTrough: () => void;
+  toggleBuildMode: () => void;
+  placeFence: (x: number, y: number) => void;
+  removeFence: (x: number, y: number) => void;
+  rotateFence: (x: number, y: number) => void;
   upgradePen: () => void;
-  eatFromTrough: (id: string) => void;
+  eatGrass: (id: string, amount: number) => void;
+  removeGrass: (id: string) => void;
+  spawnGrass: () => void;
   cleanAll: () => void;
   sheepDefecate: (id: string, x: number, y: number) => void;
+  addGrassTrail: (x: number, y: number) => void;
+  clearOldGrassTrails: () => void;
   gameTick: () => void;
   addSheep: () => void;
   addCoins: (amount: number) => void;
@@ -50,6 +76,7 @@ interface GameState {
   devSetState: (newState: Partial<GameState>) => void;
   soundEnabled: boolean;
   setSoundEnabled: (enabled: boolean) => void;
+  triggerWeather: (weather: 'sunny' | 'rainy' | 'windy', durationSeconds: number) => void;
 }
 
 export const useGameStore = create<GameState>()(
@@ -65,32 +92,92 @@ export const useGameStore = create<GameState>()(
         { id: '2', name: '小黑', stage: 'BABY', gender: 'MALE', age: 0, health: 100, hunger: 100, woolGrowth: 0, lastBredAge: 0 },
       ],
       feces: [],
+      grassTrails: [],
+      grassDecorations: [],
+      fences: [],
+      buildMode: false,
       lastTick: Date.now(),
-      troughCapacity: 0,
-      maxTroughCapacity: 100,
       timeOfDay: 8, // Start at 8:00 AM
       timeSpeed: 1,
       dayCount: 1,
+      weather: 'sunny',
+      windDirection: 0,
+      windStrength: 0,
+      weatherEndTime: 0,
       soundEnabled: true,
 
       setSoundEnabled: (enabled) => set({ soundEnabled: enabled }),
       devSetState: (newState) => set((state) => ({ ...state, ...newState })),
 
-      fillTrough: () => set((state) => {
-        if (state.coins < 10 || state.troughCapacity >= state.maxTroughCapacity) return state;
+      triggerWeather: (weather, durationSeconds) => set({
+        weather,
+        windDirection: weather === 'windy' ? Math.random() * 360 : 0,
+        windStrength: weather === 'windy' ? 30 + Math.random() * 70 : 0,
+        weatherEndTime: Date.now() + durationSeconds * 1000
+      }),
+
+      addGrassTrail: (x, y) => set((state) => ({
+        grassTrails: [...(state.grassTrails || []), { id: Date.now().toString() + Math.random(), x, y, timestamp: Date.now() }]
+      })),
+
+      clearOldGrassTrails: () => set((state) => {
+        const now = Date.now();
+        const validTrails = (state.grassTrails || []).filter(t => now - t.timestamp < 3000); // Keep trails for 3 seconds
+        if (validTrails.length === (state.grassTrails || []).length) return state;
+        return { grassTrails: validTrails };
+      }),
+
+      removeGrass: (id) => set((state) => ({
+        grassDecorations: (state.grassDecorations || []).filter(g => g.id !== id)
+      })),
+
+      toggleBuildMode: () => set((state) => ({ buildMode: !state.buildMode })),
+
+      placeFence: (x, y) => set((state) => {
+        // Assume fence costs 5 coins
+        if (state.coins < 5) return state;
+        // Check if fence already exists
+        if ((state.fences || []).some(f => f.x === x && f.y === y)) return state;
         return {
-          coins: state.coins - 10,
-          troughCapacity: state.maxTroughCapacity
+          coins: state.coins - 5,
+          fences: [...(state.fences || []), { id: `fence-${Date.now()}-${x}-${y}`, x, y, rotation: 0 }]
         };
       }),
 
-      upgradeTrough: () => set((state) => {
-        const upgradeCost = 100 * (state.maxTroughCapacity / 100);
-        if (state.coins < upgradeCost) return state;
-        return {
-          coins: state.coins - upgradeCost,
-          maxTroughCapacity: state.maxTroughCapacity + 100
-        };
+      removeFence: (x, y) => set((state) => ({
+        fences: (state.fences || []).filter(f => !(f.x === x && f.y === y)),
+        coins: state.coins + 2 // Refund 2 coins
+      })),
+
+      rotateFence: (x, y) => set((state) => ({
+        fences: (state.fences || []).map(f =>
+          f.x === x && f.y === y ? { ...f, rotation: (f.rotation + 90) % 360 } : f
+        )
+      })),
+
+      spawnGrass: () => set((state) => {
+        const MAX_GRASS = 50;
+        const currentGrassCount = (state.grassDecorations || []).length;
+        
+        // If we already have the maximum amount of grass, do nothing
+        if (currentGrassCount >= MAX_GRASS) return state;
+        
+        // Only spawn what's missing to reach MAX_GRASS, up to a batch size of 5
+        const missingAmount = MAX_GRASS - currentGrassCount;
+        const spawnCount = Math.min(missingAmount, 5); 
+        
+        if (spawnCount <= 0) return state;
+
+        const newGrass = [];
+        for (let i = 0; i < spawnCount; i++) {
+          newGrass.push({
+            id: `dec-${Date.now()}-${Math.random()}`,
+            x: Math.random() * 100,
+            y: Math.random() * 100,
+            scale: 0.6 + Math.random() * 0.6,
+          });
+        }
+        return { grassDecorations: [...(state.grassDecorations || []), ...newGrass] };
       }),
 
       upgradePen: () => set((state) => {
@@ -104,23 +191,13 @@ export const useGameStore = create<GameState>()(
         };
       }),
 
-      eatFromTrough: (id) => set((state) => {
-        if (state.troughCapacity <= 0) return state;
+      eatGrass: (id, amount) => set((state) => {
         const sheep = state.sheepList.find(s => s.id === id);
-        if (!sheep || sheep.hunger >= 100 || sheep.health <= 0) return state;
-
-        // Eating speed depends on growth stage
-        let maxEatPerBite = 10; // BABY
-        if (sheep.stage === 'GROWING') maxEatPerBite = 20;
-        if (sheep.stage === 'ADULT') maxEatPerBite = 40;
-
-        const eatAmount = Math.min(maxEatPerBite, 100 - sheep.hunger, state.troughCapacity);
-        const newCapacity = Math.max(0, state.troughCapacity - eatAmount);
+        if (!sheep || sheep.health <= 0) return state;
 
         return {
-          troughCapacity: newCapacity,
           sheepList: state.sheepList.map(s => 
-            s.id === id ? { ...s, hunger: s.hunger + eatAmount } : s
+            s.id === id ? { ...s, hunger: Math.min(100, s.hunger + amount) } : s
           )
         };
       }),
@@ -269,11 +346,45 @@ export const useGameStore = create<GameState>()(
         const daysPassed = Math.floor(totalTime / 24);
         const newDayCount = (state.dayCount || 1) + daysPassed;
 
+        // Check if weather should end
+        let newWeather = state.weather;
+        let newWindDirection = state.windDirection;
+        let newWindStrength = state.windStrength;
+        if (now >= state.weatherEndTime && state.weather !== 'sunny') {
+          newWeather = 'sunny';
+          newWindDirection = 0;
+          newWindStrength = 0;
+        }
+
+        // Random weather trigger (10% chance per minute when sunny)
+        if (state.weather === 'sunny' && Math.random() < 0.1) {
+          const willBeWindy = Math.random() > 0.5;
+          newWeather = willBeWindy ? 'windy' : 'rainy';
+          const duration = 30 + Math.random() * 60; // 30-90 seconds
+          if (willBeWindy) {
+            newWindDirection = Math.random() * 360;
+            newWindStrength = 30 + Math.random() * 70;
+          }
+          return {
+            sheepList: updatedSheep,
+            lastTick: now,
+            timeOfDay: newTimeOfDay,
+            dayCount: newDayCount,
+            weather: newWeather,
+            windDirection: newWindDirection,
+            windStrength: newWindStrength,
+            weatherEndTime: now + duration * 1000
+          };
+        }
+
         return {
           sheepList: updatedSheep,
           lastTick: now,
           timeOfDay: newTimeOfDay,
-          dayCount: newDayCount
+          dayCount: newDayCount,
+          weather: newWeather,
+          windDirection: newWindDirection,
+          windStrength: newWindStrength
         };
       }),
     }),

@@ -7,26 +7,128 @@ import { playBaa } from '../utils/audio';
 export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
   const timeOfDay = useGameStore(state => state.timeOfDay);
   const soundEnabled = useGameStore(state => state.soundEnabled);
+  const fences = useGameStore(state => state.fences);
+  const weather = useGameStore(state => state.weather);
+  const windDirection = useGameStore(state => state.windDirection);
+  const windStrength = useGameStore(state => state.windStrength);
   const isNight = timeOfDay >= 19 || timeOfDay < 6;
   const isNightRef = useRef(isNight);
   useEffect(() => { isNightRef.current = isNight; }, [isNight]);
   const sheepDefecate = useGameStore(state => state.sheepDefecate);
 
-  // Random initial position within the pen (strictly inside fences)
-  const [pos, setPos] = useState({ 
-    x: 20 + Math.random() * 60, 
-    y: 20 + Math.random() * 60 
-  });
+  // Random initial position in the center area of the map (30-70%)
+  const [pos, setPos] = useState(() => ({
+    x: 30 + Math.random() * 40,
+    y: 30 + Math.random() * 40
+  }));
   const posRef = useRef(pos);
   useEffect(() => { posRef.current = pos; }, [pos]);
 
-  // Movement bounds: 18% to 82% to ensure sheep stays inside the 24px fences
-  const MIN_BOUND = 18;
-  const MAX_BOUND = 82;
+  // Keep fences ref updated
+  const fencesRef = useRef(fences);
+  useEffect(() => { fencesRef.current = fences; }, [fences]);
+
+  // Collision detection for fences (32x32px grid)
+  const FENCE_SIZE = 32;
+  const checkFenceCollision = (targetXPercent: number, targetYPercent: number): boolean => {
+    if (fencesRef.current.length === 0) {
+      return false;
+    }
+
+    // Get the sheep entity's parent container (should be the pen container)
+    const sheepEl = document.getElementById(`sheep-${sheep.id}`);
+    const containerEl = sheepEl?.parentElement;
+    if (!containerEl) {
+      return false;
+    }
+
+    const containerRect = containerEl.getBoundingClientRect();
+
+    // Convert sheep percentage position to pixel position relative to container
+    const sheepPixelX = (targetXPercent / 100) * containerRect.width;
+    const sheepPixelY = (targetYPercent / 100) * containerRect.height;
+
+    // Use a large collision radius - the sheep should be fully blocked by fence
+    const sheepSize = sheep.stage === 'BABY' ? 32 : sheep.stage === 'GROWING' ? 48 : 64;
+    const collisionRadius = sheepSize * 0.6;
+
+    for (const fence of fencesRef.current) {
+      // Fence bounds (fence.x, fence.y are already in pixels relative to container)
+      const fenceLeft = fence.x;
+      const fenceRight = fence.x + FENCE_SIZE;
+      const fenceTop = fence.y;
+      const fenceBottom = fence.y + FENCE_SIZE;
+
+      // Sheep collision box
+      const sheepLeft = sheepPixelX - collisionRadius;
+      const sheepRight = sheepPixelX + collisionRadius;
+      const sheepTop = sheepPixelY - collisionRadius;
+      const sheepBottom = sheepPixelY + collisionRadius;
+
+      // Box-based overlap check
+      if (sheepRight > fenceLeft && sheepLeft < fenceRight &&
+          sheepBottom > fenceTop && sheepTop < fenceBottom) {
+        return true; // Collision detected
+      }
+    }
+    return false;
+  };
+
+  // Try to move in one of 4 orthogonal directions, returns new position or null if all blocked
+  const tryOrthogonalMove = (startX: number, startY: number, step: number): { newX: number, newY: number, windMultiplier?: number } | null => {
+    // Don't move if currently in collision
+    if (checkFenceCollision(startX, startY)) {
+      return null;
+    }
+
+    // Direction angles: right=0, left=180, down=90, up=270
+    const directions = [
+      { dx: step, dy: 0, angle: 0 },     // right
+      { dx: -step, dy: 0, angle: 180 }, // left
+      { dx: 0, dy: step, angle: 90 },   // down
+      { dx: 0, dy: -step, angle: 270 }, // up
+    ];
+
+    // Calculate wind multiplier if windy
+    let windMultiplier = 1;
+    if (weather === 'windy' && windStrength > 0) {
+      // Sort directions by preference: wind-assisted first, then random
+      directions.sort((a, b) => {
+        const aAngleDiff = Math.abs(Math.sin(((b.angle - windDirection) * Math.PI) / 180));
+        const bAngleDiff = Math.abs(Math.sin(((a.angle - windDirection) * Math.PI) / 180));
+        // Higher sin value = more aligned with wind direction = faster
+        return aAngleDiff - bAngleDiff;
+      });
+    } else {
+      // Shuffle for natural movement when not windy
+      directions.sort(() => Math.random() - 0.5);
+    }
+
+    for (const dir of directions) {
+      const newX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, startX + dir.dx));
+      const newY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, startY + dir.dy));
+      // Check collision BEFORE returning - must be clear of fences
+      if (!checkFenceCollision(newX, newY)) {
+        // Calculate wind multiplier based on alignment with wind direction
+        if (weather === 'windy' && windStrength > 0) {
+          const alignment = Math.abs(Math.sin(((dir.angle - windDirection) * Math.PI) / 180));
+          // alignment 1 = with wind (90° or 270°), 0 = against wind (0° or 180°)
+          windMultiplier = 0.5 + alignment * (windStrength / 100); // 0.5 to 1.5
+        }
+        return { newX, newY, windMultiplier };
+      }
+    }
+    return null;
+  };
+
+  // Movement bounds: 0% to 100% to utilize the full screen area
+  const MIN_BOUND = 2;
+  const MAX_BOUND = 98;
 
   // Sheep faces left by default (head is on the left in the SVG). 
   const [facingRight, setFacingRight] = useState(Math.random() > 0.5);
   const [isMoving, setIsMoving] = useState(false);
+  const [moveDuration, setMoveDuration] = useState(1.8); // Default move duration
   const [isKnockedBack, setIsKnockedBack] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [isDefecating, setIsDefecating] = useState(false);
@@ -83,16 +185,21 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
     return () => clearInterval(interval);
   }, [sheep.id, sheepDefecate]);
 
-  const troughCapacity = useGameStore(state => state.troughCapacity);
-  const eatFromTrough = useGameStore(state => state.eatFromTrough);
+  const eatGrass = useGameStore(state => state.eatGrass);
+  const removeGrass = useGameStore(state => state.removeGrass);
   const clearCorpse = useGameStore(state => state.clearCorpse);
+  const addGrassTrail = useGameStore(state => state.addGrassTrail);
 
   const isDead = sheep.health <= 0;
   const isDeadRef = useRef(isDead);
   useEffect(() => { isDeadRef.current = isDead; }, [isDead]);
 
   const sheepRef = useRef(sheep);
-  const troughCapacityRef = useRef(troughCapacity);
+
+  // Eating state
+  const [isEating, setIsEating] = useState(false);
+  const isEatingRef = useRef(false);
+  useEffect(() => { isEatingRef.current = isEating; }, [isEating]);
 
   // Intermittent ambient sound
   useEffect(() => {
@@ -116,14 +223,7 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
     return () => clearTimeout(timeoutId);
   }, [isDead]);
 
-  // Calculate a fixed feeding spot near the bottom fence for this sheep
-  const feedSpot = useRef({
-    x: 35 + Math.random() * 30, // 35% to 65% width (along the trough)
-    y: 85 + Math.random() * 5   // 85% to 90% height (near the bottom fence)
-  });
-
   useEffect(() => { sheepRef.current = sheep; }, [sheep]);
-  useEffect(() => { troughCapacityRef.current = troughCapacity; }, [troughCapacity]);
 
   const prevStageRef = useRef(sheep.stage);
   useEffect(() => {
@@ -137,67 +237,184 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
 
   useEffect(() => {
     const moveInterval = setInterval(() => {
-      if (isNightRef.current || isDeadRef.current) {
+      if (isNightRef.current || isDeadRef.current || isEatingRef.current) {
         setIsMoving(false);
         return;
       }
 
       const currentSheep = sheepRef.current;
-      const currentTroughCapacity = troughCapacityRef.current;
       const prevPos = posRef.current;
 
       const needsFood = currentSheep.hunger < 90;
-      const troughAvailable = currentTroughCapacity > 0;
-      
-      // Target position is the feed spot near the bottom fence
-      const troughPos = { 
-        x: feedSpot.current.x, 
-        y: feedSpot.current.y 
-      };
 
-      if (needsFood && troughAvailable) {
-        const dx = troughPos.x - prevPos.x;
-        const dy = troughPos.y - prevPos.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+      if (needsFood) {
+        // Find the nearest grass element
+        const grassElements = document.querySelectorAll('[id^="grass-dec-"]');
+        let nearestGrass: Element | null = null;
+        let minDistance = Infinity;
+        let targetX = 0;
+        let targetY = 0;
 
-        if (dist > 12) {
-          // Move towards trough
-          const step = 15;
-          let newX = prevPos.x + (dx / dist) * step;
-          let newY = prevPos.y + (dy / dist) * step;
-          
-          newX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newX));
-          newY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newY));
+        grassElements.forEach(el => {
+          // Check if it's already trampled (frame !== -1), if so skip
+          const img = el.querySelector('img');
+          if (img && !img.src.includes('grass.png')) return;
 
-          setFacingRight(newX > prevPos.x);
-          setIsMoving(true);
-          setTimeout(() => setIsMoving(false), 1000);
-          setPos({ x: newX, y: newY });
+          const rect = el.getBoundingClientRect();
+          const parentRect = el.parentElement?.getBoundingClientRect();
+          if (!parentRect) return;
+
+          // Calculate center of grass in percentage of parent container
+          const gX = ((rect.left - parentRect.left + rect.width / 2) / parentRect.width) * 100;
+          const gY = ((rect.top - parentRect.top + rect.height / 2) / parentRect.height) * 100;
+
+          const dist = Math.sqrt(Math.pow(gX - prevPos.x, 2) + Math.pow(gY - prevPos.y, 2));
+          if (dist < minDistance) {
+            minDistance = dist;
+            nearestGrass = el;
+            targetX = gX;
+            targetY = gY;
+          }
+        });
+
+        if (nearestGrass) {
+          if (minDistance > 5) {
+            const step = 5;
+
+            // First check if current position is already in collision - if so, try to escape first
+            if (checkFenceCollision(prevPos.x, prevPos.y)) {
+              const escapeMove = tryOrthogonalMove(prevPos.x, prevPos.y, step * 2);
+              if (escapeMove) {
+                const actualDx = escapeMove.newX - prevPos.x;
+                const actualDy = escapeMove.newY - prevPos.y;
+                const actualDist = Math.sqrt(actualDx * actualDx + actualDy * actualDy);
+                const windMult = escapeMove.windMultiplier || 1;
+                const escDuration = Math.min((actualDist / 15) * 1.8, 4.0) / windMult;
+                setMoveDuration(escDuration);
+                setFacingRight(escapeMove.newX > prevPos.x);
+                setIsMoving(true);
+                addGrassTrail(prevPos.x, prevPos.y);
+                setTimeout(() => setIsMoving(false), escDuration * 1000);
+                setPos({ x: escapeMove.newX, y: escapeMove.newY });
+              }
+              return;
+            }
+
+            // Determine primary direction towards grass (horizontal or vertical)
+            const dX = targetX - prevPos.x;
+            const dY = targetY - prevPos.y;
+            let newX = prevPos.x;
+            let newY = prevPos.y;
+
+            // Move in the primary direction towards grass
+            if (Math.abs(dX) > Math.abs(dY)) {
+              // Horizontal primary
+              newX = prevPos.x + Math.sign(dX) * step;
+            } else {
+              // Vertical primary
+              newY = prevPos.y + Math.sign(dY) * step;
+            }
+
+            newX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newX));
+            newY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newY));
+
+            // Check fence collision before moving
+            let windMult = 1;
+            if (checkFenceCollision(newX, newY)) {
+              // Try orthogonal directions to go around
+              const altMove = tryOrthogonalMove(prevPos.x, prevPos.y, step);
+              if (altMove) {
+                newX = altMove.newX;
+                newY = altMove.newY;
+                windMult = altMove.windMultiplier || 1;
+              } else {
+                // Completely blocked, skip this movement
+                return;
+              }
+            }
+
+            const actualDx = newX - prevPos.x;
+            const actualDy = newY - prevPos.y;
+            const actualDist = Math.sqrt(actualDx * actualDx + actualDy * actualDy);
+
+            const calculatedDuration = Math.min((actualDist / 15) * 1.8, 4.0) / windMult;
+            setMoveDuration(calculatedDuration);
+
+            setFacingRight(newX > prevPos.x);
+            setIsMoving(true);
+            addGrassTrail(prevPos.x, prevPos.y);
+
+            setTimeout(() => setIsMoving(false), calculatedDuration * 1000);
+            setPos({ x: newX, y: newY });
+          } else {
+            // Close enough to grass, start eating
+            setIsEating(true);
+            setIsMoving(false);
+            
+            // Face the grass
+            setFacingRight(targetX > prevPos.x);
+
+            // Extract grass ID to remove it later
+            const grassId = nearestGrass.id.replace('grass-', '');
+
+            // Eat for 10 seconds, recovering hunger progressively
+            let eatTicks = 0;
+            const eatTimer = setInterval(() => {
+              eatTicks++;
+              eatGrass(currentSheep.id, 10); // Recover 10 hunger per second, total 100 in 10s
+              if (eatTicks >= 10 || isDeadRef.current || isNightRef.current) {
+                clearInterval(eatTimer);
+                setIsEating(false);
+                
+                // If finished eating successfully, remove the grass
+                if (eatTicks >= 10) {
+                  removeGrass(grassId);
+                }
+              }
+            }, 1000);
+          }
         } else {
-          // Close enough, eat!
-          eatFromTrough(currentSheep.id);
-          setIsMoving(false);
-          setFacingRight(troughPos.x > prevPos.x);
+          // No grass found, just wander
+          randomWander();
         }
       } else {
         // Random wander
+        randomWander();
+      }
+
+      function randomWander() {
         if (Math.random() > 0.4) {
-          let newX = MIN_BOUND + Math.random() * (MAX_BOUND - MIN_BOUND);
-          let newY = MIN_BOUND + Math.random() * (MAX_BOUND - MIN_BOUND);
-          
-          newX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newX));
-          newY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newY));
+          const step = 5;
+          const altMove = tryOrthogonalMove(prevPos.x, prevPos.y, step);
+
+          if (!altMove) {
+            // Completely blocked, skip this movement
+            return;
+          }
+
+          const newX = altMove.newX;
+          const newY = altMove.newY;
+          const windMult = altMove.windMultiplier || 1;
+
+          const actualDx = newX - prevPos.x;
+          const actualDy = newY - prevPos.y;
+          const actualDist = Math.sqrt(actualDx * actualDx + actualDy * actualDy);
+
+          const calculatedDuration = Math.min((actualDist / 15) * 1.8, 4.0) / windMult;
+          setMoveDuration(calculatedDuration);
 
           setFacingRight(newX > prevPos.x);
           setIsMoving(true);
-          setTimeout(() => setIsMoving(false), 2000);
+          addGrassTrail(prevPos.x, prevPos.y);
+
+          setTimeout(() => setIsMoving(false), calculatedDuration * 1000);
           setPos({ x: newX, y: newY });
         }
       }
     }, 2000); // Decide to move every 2 seconds
 
     return () => clearInterval(moveInterval);
-  }, [eatFromTrough]);
+  }, [eatGrass, fences]);
 
   const handleSheepClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -231,23 +448,51 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
     const sheepCenterY = rect.top + rect.height / 2;
     const dx = sheepCenterX - e.clientX;
     const dy = sheepCenterY - e.clientY;
-    
+
     const dist = Math.sqrt(dx * dx + dy * dy);
     const normX = dist === 0 ? (Math.random() > 0.5 ? 1 : -1) : dx / dist;
     const normY = dist === 0 ? (Math.random() > 0.5 ? 1 : -1) : dy / dist;
-    
-    const force = 12; // Push back by 12% of pen size
-    
+
+    const force = 2; // Push back by 6% of pen size
+
     let newX = pos.x + normX * force;
     let newY = pos.y + normY * force;
-    
+
     // Keep within bounds
     newX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newX));
     newY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newY));
-    
+
+    // Check fence collision
+    if (checkFenceCollision(newX, newY)) {
+      // Try to find a non-blocked position
+      const directions = [
+        { dx: normX * force, dy: 0 },
+        { dx: 0, dy: normY * force },
+        { dx: -normX * force, dy: 0 },
+        { dx: 0, dy: -normY * force },
+      ];
+
+      let foundPath = false;
+      for (const dir of directions) {
+        const altX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, pos.x + dir.dx));
+        const altY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, pos.y + dir.dy));
+        if (!checkFenceCollision(altX, altY)) {
+          newX = altX;
+          newY = altY;
+          foundPath = true;
+          break;
+        }
+      }
+
+      if (!foundPath) {
+        // Completely blocked, don't move
+        return;
+      }
+    }
+
     setIsKnockedBack(true);
     setPos({ x: newX, y: newY });
-    
+
     setTimeout(() => {
       setIsKnockedBack(false);
     }, 300);
@@ -259,14 +504,97 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
     sheep.stage === 'GROWING' ? 'w-12 h-12' : 
     'w-16 h-16';
 
+  // Frame animation state
+  const [currentFrame, setCurrentFrame] = useState(0);
+  const babyFrameCount = 12; // frame_0000.png to frame_0011.png (female)
+  const youngFrames = [0, 2, 3, 4, 7, 8]; // (female)
+  const adultFrameCount = 8; // frame_000.png to frame_007.png (female)
+
+  const maleBabyFrameCount = 10; // frame_0000.png to frame_0009.png
+  const maleYoungFrameCount = 10; // frame_0000.png to frame_0009.png
+  const maleAdultFrameCount = 10; // frame_0000.png to frame_0009.png
+
+  // Preload frames to prevent flickering
+  useEffect(() => {
+    if (sheep.gender === 'FEMALE') {
+      if (sheep.stage === 'BABY') {
+        for (let i = 0; i < babyFrameCount; i++) {
+          const img = new Image();
+          img.src = `/female-sheep-baby/frame_${i.toString().padStart(4, '0')}.png`;
+        }
+      } else if (sheep.stage === 'GROWING') {
+        youngFrames.forEach(frameNum => {
+          const img = new Image();
+          img.src = `/female-sheep-young/frame_${frameNum.toString().padStart(4, '0')}.png`;
+        });
+      } else if (sheep.stage === 'ADULT') {
+        for (let i = 0; i < adultFrameCount; i++) {
+          const img = new Image();
+          img.src = `/female-sheep-adult/frame_${i.toString().padStart(3, '0')}.png`;
+        }
+      }
+    } else if (sheep.gender === 'MALE') {
+      if (sheep.stage === 'BABY') {
+        for (let i = 0; i < maleBabyFrameCount; i++) {
+          const img = new Image();
+          img.src = `/male-sheep-baby/frame_${i.toString().padStart(4, '0')}.png`;
+        }
+      } else if (sheep.stage === 'GROWING') {
+        for (let i = 0; i < maleYoungFrameCount; i++) {
+          const img = new Image();
+          img.src = `/male-sheep-young/frame_${i.toString().padStart(4, '0')}.png`;
+        }
+      } else if (sheep.stage === 'ADULT') {
+        for (let i = 0; i < maleAdultFrameCount; i++) {
+          const img = new Image();
+          img.src = `/male-sheep-adult/frame_${i.toString().padStart(4, '0')}.png`;
+        }
+      }
+    }
+  }, [sheep.gender, sheep.stage]);
+
+  useEffect(() => {
+    let frameInterval: ReturnType<typeof setInterval>;
+    if (!isDead) {
+      if (isMoving) {
+        frameInterval = setInterval(() => {
+          if (sheep.gender === 'FEMALE') {
+            if (sheep.stage === 'BABY') {
+              setCurrentFrame((prev) => (prev + 1) % babyFrameCount);
+            } else if (sheep.stage === 'GROWING') {
+              setCurrentFrame((prev) => (prev + 1) % youngFrames.length);
+            } else if (sheep.stage === 'ADULT') {
+              setCurrentFrame((prev) => (prev + 1) % adultFrameCount);
+            }
+          } else if (sheep.gender === 'MALE') {
+            if (sheep.stage === 'BABY') {
+              setCurrentFrame((prev) => (prev + 1) % maleBabyFrameCount);
+            } else if (sheep.stage === 'GROWING') {
+              setCurrentFrame((prev) => (prev + 1) % maleYoungFrameCount);
+            } else if (sheep.stage === 'ADULT') {
+              setCurrentFrame((prev) => (prev + 1) % maleAdultFrameCount);
+            }
+          }
+        }, 100); // Walk animation speed
+      } else {
+        setCurrentFrame(0); 
+      }
+    }
+    return () => {
+      if (frameInterval) clearInterval(frameInterval);
+    };
+  }, [isMoving, isDead, sheep.gender, sheep.stage]);
+
   return (
     <motion.div
-      className="absolute cursor-pointer"
+      id={`sheep-${sheep.id}`}
+      className="sheep-entity absolute cursor-pointer pointer-events-auto"
+      initial={false}
       animate={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-      transition={isKnockedBack ? { type: "spring", stiffness: 300, damping: 15 } : { duration: 1.8, ease: "linear" }}
+      transition={isKnockedBack ? { type: "spring", stiffness: 300, damping: 15 } : { duration: moveDuration, ease: "linear" }}
       style={{ 
         transform: `translate(-50%, -50%)`,
-        zIndex: Math.round(pos.y) // Dynamic z-index based on Y position for correct overlap
+        zIndex: Math.round(pos.y) + 20 // Ensure sheep renders above grass and fence correctly
       }}
       onClick={handleSheepClick}
     >
@@ -296,11 +624,11 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
 
         {/* Hover Status HUD */}
         {isDead ? (
-          <div className={`absolute -top-12 bg-white/95 px-3 py-2 rounded-lg text-xs font-bold shadow-xl transition-opacity pointer-events-none z-50 whitespace-nowrap border border-red-200 text-red-600 ${showStatus ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          <div className={`absolute -top-12 bg-white/95 px-3 py-2 rounded-lg text-xs font-bold shadow-xl transition-opacity pointer-events-none z-[100] whitespace-nowrap border border-red-200 text-red-600 ${showStatus ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
             小羊死去了... 点击清除
           </div>
         ) : (
-          <div className={`absolute -top-28 bg-white/95 px-3 py-2 rounded-lg text-xs font-bold shadow-xl transition-opacity pointer-events-none z-50 flex flex-col gap-1 whitespace-nowrap border border-slate-200 ${showStatus ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          <div className={`absolute -top-28 bg-white/95 px-3 py-2 rounded-lg text-xs font-bold shadow-xl transition-opacity pointer-events-none z-[100] flex flex-col gap-1 whitespace-nowrap border border-slate-200 ${showStatus ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
             <div className="text-slate-800 text-sm border-b border-slate-200 pb-1 mb-1">
               {sheep.name} {sheep.gender === 'MALE' ? '♂️' : '♀️'} ({sheep.stage === 'BABY' ? '幼崽' : sheep.stage === 'GROWING' ? '成长期' : '成年'})
             </div>
@@ -313,19 +641,22 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
         <div 
           className={`${sizeClass} drop-shadow-md ${isDead ? 'grayscale opacity-70' : ''}`}
           style={{ 
-            transform: `${facingRight ? 'scaleX(-1)' : 'scaleX(1)'} ${isDead ? 'rotate(180deg)' : ''}`,
+            // all frames (male and female) are facing right now.
+            // so we need to reverse the scaling logic for all sheep.
+            transform: `${
+              (facingRight ? 'scaleX(1)' : 'scaleX(-1)')
+            } ${isDead ? 'rotate(180deg)' : ''}`,
             imageRendering: 'pixelated'
           }}
         >
           <motion.div
             className="w-full h-full origin-bottom"
+            initial={false}
             animate={
-              isDefecating ? { scaleY: [1, 0.7, 0.7, 1], scaleX: [1, 1.1, 1.1, 1] } :
-              isMoving && !isDead ? { y: [0, -4, 0] } : { y: 0 }
+              isDefecating ? { scaleY: [1, 0.7, 0.7, 1], scaleX: [1, 1.1, 1.1, 1] } : { y: 0, scaleY: 1, scaleX: 1 }
             }
             transition={
-              isDefecating ? { duration: 0.6, times: [0, 0.3, 0.7, 1] } :
-              isMoving && !isDead ? { repeat: Infinity, duration: 0.3 } : {}
+              isDefecating ? { duration: 0.6, times: [0, 0.3, 0.7, 1] } : { duration: 0 }
             }
           >
             {/* Zzz Animation */}
@@ -340,189 +671,130 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
               </motion.div>
             )}
 
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <style>{`rect { shape-rendering: crispEdges; }`}</style>
-              
-              {/* Colors and Shapes based on health and stage */}
-              {(() => {
-                const isCritical = sheep.health > 0 && sheep.health < 40;
-                const bodyColor = isCritical ? "#ffcccc" : "#ffffff";
-                const bodyShadow = isCritical ? "#e6b3b3" : "#e0e0e0";
-                const headColor = isCritical ? "#4a2222" : "#2a2a2a";
-                const legColor = isCritical ? "#4a2222" : "#2a2a2a";
-                const backLegColor = isCritical ? "#2a0000" : "#1a1a1a";
-                const hornColor = "#d4b886";
-                const hornShadow = "#b39865";
-                const hasHorns = sheep.gender === 'MALE';
-                
-                if (sheep.stage === 'BABY') {
-                  return (
-                    <>
-                      {/* Short Back Legs */}
-                      <rect x="9" y="18" width="2" height="2" fill={backLegColor}/>
-                      <rect x="15" y="18" width="2" height="2" fill={backLegColor}/>
-                      
-                      {/* Body Shadow */}
-                      <rect x="7" y="15" width="12" height="3" fill={bodyShadow}/>
-                      <rect x="6" y="14" width="14" height="3" fill={bodyShadow}/>
-                      
-                      {/* Very Round Fluffy Body */}
-                      <rect x="7" y="9" width="12" height="6" fill={bodyColor}/>
-                      <rect x="6" y="10" width="14" height="4" fill={bodyColor}/>
-                      <rect x="8" y="8" width="10" height="8" fill={bodyColor}/>
-                      
-                      {/* Short Front Legs */}
-                      <rect x="7" y="18" width="2" height="3" fill={legColor}/>
-                      <rect x="13" y="18" width="2" height="3" fill={legColor}/>
-                      
-                      {/* Cute Round Face */}
-                      <rect x="3" y="10" width="5" height="5" fill={headColor}/>
-                      <rect x="2" y="11" width="7" height="3" fill={headColor}/>
-                      
-                      {/* Big Eye */}
-                      {isDefecating ? (
-                        <rect x="4" y="11" width="2" height="1" fill="#ffffff"/>
-                      ) : !isNight ? (
-                        <>
-                          <rect x="3" y="11" width="2" height="2" fill="#ffffff"/>
-                          <rect x="3" y="11" width="1" height="1" fill="#000000"/>
-                        </>
-                      ) : (
-                        <rect x="3" y="12" width="2" height="1" fill="#111111"/>
-                      )}
-                      
-                      {/* Blushing Cheeks */}
-                      <rect x="5" y="13" width="2" height="1" fill="#ff9999"/>
-                      
-                      {/* Small Ear */}
-                      <rect x="6" y="12" width="2" height="1" fill="#111111"/>
-                    </>
-                  );
-                }
-                
-                if (sheep.stage === 'GROWING') {
-                  return (
-                    <>
-                      {/* Longer Back Legs */}
-                      <rect x="9" y="17" width="2" height="5" fill={backLegColor}/>
-                      <rect x="15" y="17" width="2" height="5" fill={backLegColor}/>
-                      
-                      {/* Body Shadow */}
-                      <rect x="7" y="14" width="12" height="3" fill={bodyShadow}/>
-                      
-                      {/* Slender Body */}
-                      <rect x="7" y="10" width="12" height="4" fill={bodyColor}/>
-                      <rect x="6" y="11" width="14" height="2" fill={bodyColor}/>
-                      
-                      {/* Longer Front Legs */}
-                      <rect x="7" y="18" width="2" height="5" fill={legColor}/>
-                      <rect x="13" y="18" width="2" height="5" fill={legColor}/>
-                      
-                      {/* Face */}
-                      <rect x="3" y="9" width="5" height="5" fill={headColor}/>
-                      <rect x="2" y="10" width="6" height="3" fill={headColor}/>
-                      
-                      {/* Small Horns for young male */}
-                      {hasHorns && (
-                        <>
-                          <rect x="5" y="7" width="1" height="2" fill={hornColor}/>
-                          <rect x="4" y="8" width="1" height="1" fill={hornColor}/>
-                        </>
-                      )}
-                      
-                      {/* Eye */}
-                      {isDefecating ? (
-                        <rect x="4" y="10" width="2" height="1" fill="#ffffff"/>
-                      ) : !isNight ? (
-                        <>
-                          <rect x="4" y="10" width="1" height="2" fill="#ffffff"/>
-                          <rect x="4" y="10" width="1" height="1" fill="#000000"/>
-                        </>
-                      ) : (
-                        <rect x="4" y="11" width="2" height="1" fill="#111111"/>
-                      )}
-                      
-                      {/* Ear */}
-                      <rect x="6" y="11" width="2" height="1" fill="#111111"/>
-                    </>
-                  );
-                }
-
-                // ADULT
-                return (
-                  <>
-                    {/* Sturdy Back Legs */}
-                    <rect x="8" y="18" width="3" height="4" fill={backLegColor}/>
-                    <rect x="16" y="18" width="3" height="4" fill={backLegColor}/>
-                    
-                    {/* Massive Fluffy Body Shadow */}
-                    <rect x="5" y="15" width="16" height="4" fill={bodyShadow}/>
-                    <rect x="4" y="13" width="2" height="4" fill={bodyShadow}/>
-                    <rect x="20" y="13" width="2" height="4" fill={bodyShadow}/>
-                    
-                    {/* Massive Fluffy Body Fill */}
-                    <rect x="5" y="7" width="16" height="8" fill={bodyColor}/>
-                    <rect x="4" y="8" width="18" height="6" fill={bodyColor}/>
-                    <rect x="6" y="6" width="14" height="10" fill={bodyColor}/>
-                    <rect x="7" y="5" width="12" height="12" fill={bodyColor}/>
-                    
-                    {/* Wool Fluffs (Highlights) */}
-                    <rect x="7" y="6" width="2" height="2" fill="#ffffff"/>
-                    <rect x="12" y="5" width="3" height="2" fill="#ffffff"/>
-                    <rect x="17" y="6" width="2" height="2" fill="#ffffff"/>
-                    
-                    {/* Sturdy Front Legs */}
-                    <rect x="6" y="19" width="3" height="4" fill={legColor}/>
-                    <rect x="14" y="19" width="3" height="4" fill={legColor}/>
-                    
-                    {/* Mature Face */}
-                    <rect x="1" y="8" width="6" height="7" fill={headColor}/>
-                    <rect x="0" y="10" width="7" height="4" fill={headColor}/>
-                    <rect x="2" y="15" width="4" height="2" fill={headColor}/>
-                    
-                    {/* Snout Highlight */}
-                    <rect x="0" y="12" width="2" height="1" fill="#3a3a3a"/>
-                    
-                    {/* Horns (Male Only) */}
-                    {hasHorns && (
-                      <>
-                        {/* Front Horn */}
-                        <rect x="3" y="4" width="3" height="4" fill={hornColor}/>
-                        <rect x="2" y="3" width="3" height="2" fill={hornColor}/>
-                        <rect x="1" y="4" width="2" height="3" fill={hornColor}/>
-                        <rect x="1" y="7" width="3" height="2" fill={hornShadow}/>
-                        <rect x="4" y="6" width="2" height="2" fill={hornShadow}/>
-                        
-                        {/* Back Horn */}
-                        <rect x="6" y="3" width="2" height="3" fill={hornShadow}/>
-                        <rect x="7" y="6" width="2" height="2" fill={hornShadow}/>
-                      </>
-                    )}
-                    
-                    {/* Eye */}
-                    {isDefecating ? (
-                      <rect x="2" y="9" width="2" height="1" fill="#ffffff"/>
-                    ) : !isNight ? (
-                      <>
-                        <rect x="2" y="9" width="2" height="2" fill="#ffffff"/>
-                        <rect x="2" y="9" width="1" height="1" fill="#000000"/>
-                      </>
-                    ) : (
-                      <rect x="2" y="10" width="2" height="1" fill="#111111"/>
-                    )}
-                    
-                    {/* Ear */}
-                    <rect x="5" y="11" width="3" height="1" fill="#111111"/>
-                    <rect x="6" y="12" width="2" height="1" fill="#111111"/>
-                  </>
-                );
-              })()}
-            </svg>
+            {sheep.gender === 'FEMALE' ? (
+              sheep.stage === 'BABY' ? (
+                // Use pre-rendered img tags for animation to prevent any flickering
+                <div className="relative w-full h-full">
+                  {Array.from({ length: babyFrameCount }).map((_, index) => (
+                    <img
+                      key={index}
+                      src={`/female-sheep-baby/frame_${index.toString().padStart(4, '0')}.png`}
+                      alt="Baby sheep frame"
+                      className={`absolute inset-0 w-full h-full object-contain ${
+                        currentFrame === index ? 'opacity-100' : 'opacity-0'
+                      }`}
+                      style={{
+                        imageRendering: 'pixelated',
+                        filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : sheep.stage === 'GROWING' ? (
+                // Use pre-rendered img tags for young sheep animation
+                <div className="relative w-full h-full">
+                  {youngFrames.map((frameNum, index) => (
+                    <img
+                      key={frameNum}
+                      src={`/female-sheep-young/frame_${frameNum.toString().padStart(4, '0')}.png`}
+                      alt="Young sheep frame"
+                      className={`absolute inset-0 w-full h-full object-contain ${
+                        currentFrame === index ? 'opacity-100' : 'opacity-0'
+                      }`}
+                      style={{
+                        imageRendering: 'pixelated',
+                        filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                // Use pre-rendered img tags for adult sheep animation or sleeping state
+                <div className="relative w-full h-full">
+                  {isNight && !isDead ? (
+                    <img
+                      src="/sleep/female-adult-sleep.png"
+                      alt="Adult sheep sleeping"
+                      className="absolute inset-0 w-full h-full object-contain opacity-100"
+                      style={{
+                        imageRendering: 'pixelated',
+                        filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
+                      }}
+                    />
+                  ) : (
+                    Array.from({ length: adultFrameCount }).map((_, index) => (
+                      <img
+                        key={index}
+                        src={`/female-sheep-adult/frame_${index.toString().padStart(3, '0')}.png`}
+                        alt="Adult sheep frame"
+                        className={`absolute inset-0 w-full h-full object-contain ${
+                          currentFrame === index ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        style={{
+                          imageRendering: 'pixelated',
+                          filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
+                        }}
+                      />
+                    ))
+                  )}
+                </div>
+              )
+            ) : (
+              sheep.stage === 'BABY' ? (
+                <div className="relative w-full h-full">
+                  {Array.from({ length: maleBabyFrameCount }).map((_, index) => (
+                    <img
+                      key={index}
+                      src={`/male-sheep-baby/frame_${index.toString().padStart(4, '0')}.png`}
+                      alt="Male baby sheep frame"
+                      className={`absolute inset-0 w-full h-full object-contain ${
+                        currentFrame === index ? 'opacity-100' : 'opacity-0'
+                      }`}
+                      style={{
+                        imageRendering: 'pixelated',
+                        filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : sheep.stage === 'GROWING' ? (
+                <div className="relative w-full h-full">
+                  {Array.from({ length: maleYoungFrameCount }).map((_, index) => (
+                    <img
+                      key={index}
+                      src={`/male-sheep-young/frame_${index.toString().padStart(4, '0')}.png`}
+                      alt="Male young sheep frame"
+                      className={`absolute inset-0 w-full h-full object-contain ${
+                        currentFrame === index ? 'opacity-100' : 'opacity-0'
+                      }`}
+                      style={{
+                        imageRendering: 'pixelated',
+                        filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="relative w-full h-full">
+                  {Array.from({ length: maleAdultFrameCount }).map((_, index) => (
+                    <img
+                      key={index}
+                      src={`/male-sheep-adult/frame_${index.toString().padStart(4, '0')}.png`}
+                      alt="Male adult sheep frame"
+                      className={`absolute inset-0 w-full h-full object-contain ${
+                        currentFrame === index ? 'opacity-100' : 'opacity-0'
+                      }`}
+                      style={{
+                        imageRendering: 'pixelated',
+                        filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
+                      }}
+                    />
+                  ))}
+                </div>
+              )
+            )}
           </motion.div>
         </div>
-
-        {/* Shadow */}
-        <div className="w-3/4 h-1.5 bg-black/20 rounded-[100%] absolute -bottom-1 blur-[1px]" />
       </div>
     </motion.div>
   );
