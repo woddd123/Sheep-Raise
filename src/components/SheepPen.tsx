@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { SheepEntity } from './SheepEntity';
 
@@ -110,18 +110,36 @@ function InteractiveGrass({ dec }: { key?: React.Key; dec: { id: string, x: numb
 }
 
 export function SheepPen() {
-  const sheepList = useGameStore(state => state.sheepList);
-  const feces = useGameStore(state => state.feces);
-  const grassTrails = useGameStore(state => state.grassTrails);
+  // Get current farm data
+  const farms = useGameStore(state => state.farms);
+  const currentFarmId = useGameStore(state => state.currentFarmId);
+  const currentFarm = farms.find(f => f.id === currentFarmId) || farms[0];
+
+  const sheepList = currentFarm?.sheepList || [];
+  const feces = currentFarm?.feces || [];
+  const grassTrails = currentFarm?.grassTrails || [];
+  const grassDecorations = currentFarm?.grassDecorations || [];
+  const fences = currentFarm?.fences || [];
+  const hayFeeders = currentFarm?.hayFeeders || [];
+
   const clearOldGrassTrails = useGameStore(state => state.clearOldGrassTrails);
-  const grassDecorations = useGameStore(state => state.grassDecorations);
   const spawnGrass = useGameStore(state => state.spawnGrass);
 
   const buildMode = useGameStore(state => state.buildMode);
-  const fences = useGameStore(state => state.fences);
+  const demolishMode = useGameStore(state => state.demolishMode);
+  const pickUpMode = useGameStore(state => state.pickUpMode);
+  const pickedUpSheepId = useGameStore(state => state.pickedUpSheepId);
+  const dropTargetPos = useGameStore(state => state.dropTargetPos);
+  const setDropTargetPos = useGameStore(state => state.setDropTargetPos);
+  const cancelPickUpMode = useGameStore(state => state.cancelPickUpMode);
   const placeFence = useGameStore(state => state.placeFence);
   const removeFence = useGameStore(state => state.removeFence);
   const rotateFence = useGameStore(state => state.rotateFence);
+  const hayFeederMode = useGameStore(state => state.hayFeederMode);
+  const placeHayFeeder = useGameStore(state => state.placeHayFeeder);
+  const removeHayFeeder = useGameStore(state => state.removeHayFeeder);
+  const refillHayFeeder = useGameStore(state => state.refillHayFeeder);
+  const feed = useGameStore(state => state.feed);
 
   // Periodically clear old grass trails and spawn new grass
   useEffect(() => {
@@ -149,16 +167,53 @@ export function SheepPen() {
   const penContainerClass = `w-screen h-screen absolute inset-0 pointer-events-auto ${buildMode ? 'cursor-crosshair' : ''}`;
 
   const handlePenClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Handle sheep drop if in pickUpMode with a picked up sheep
+    if (pickUpMode && pickedUpSheepId) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // Snap to 32x32 grid for drop position
+      const gridX = Math.floor(x / 32) * 32;
+      const gridY = Math.floor(y / 32) * 32;
+
+      // Convert grid position to percentage for the sheep position
+      const newX = (gridX / rect.width) * 100;
+      const newY = (gridY / rect.height) * 100;
+
+      // Drop the sheep at this position - clear the pickup state
+      setDropTargetPos({ x: gridX, y: gridY });
+      // Use timeout to clear after the sheep has moved to the position
+      setTimeout(() => {
+        cancelPickUpMode();
+      }, 50);
+      return;
+    }
+
+    // Handle hay feeder placement
+    if (hayFeederMode) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // Snap to 32x32 grid
+      const gridX = Math.floor(x / 32) * 32;
+      const gridY = Math.floor(y / 32) * 32;
+
+      placeHayFeeder(gridX, gridY);
+      return;
+    }
+
     if (!buildMode) return;
-    
+
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
+
     // Snap to 32x32 grid
     const gridX = Math.floor(x / 32) * 32;
     const gridY = Math.floor(y / 32) * 32;
-    
+
     // Check if right click (not natively supported here easily without onContextMenu, so we'll use a modifier key like Shift+Click to remove, or just check if one exists)
     const existingFence = fences.find(f => f.x === gridX && f.y === gridY);
     if (existingFence) {
@@ -168,11 +223,28 @@ export function SheepPen() {
     }
   };
 
+  // Handle mouse move to track position - sheep follows cursor when picked up
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (pickUpMode && pickedUpSheepId) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // Snap to 32x32 grid
+      const gridX = Math.floor(x / 32) * 32;
+      const gridY = Math.floor(y / 32) * 32;
+
+      setDropTargetPos({ x: gridX, y: gridY });
+    }
+  };
+
   return (
     <div className="absolute inset-0 z-0">
-      <div 
+      <div
+        id="sheep-pen-container"
         className={`relative ${penContainerClass}`}
         onClick={handlePenClick}
+        onMouseMove={handleMouseMove}
       >
         
         {/* Inner Grass Area (Full screen) */}
@@ -202,33 +274,51 @@ export function SheepPen() {
             }}
             onClick={(e) => {
               e.stopPropagation();
-              if (buildMode) {
+              if (demolishMode) {
+                removeFence(fence.x, fence.y);
+              } else if (buildMode) {
                 rotateFence(fence.x, fence.y);
               }
             }}
-            onMouseDown={(e) => {
-              if (!buildMode) return;
-              e.stopPropagation();
-              const timer = setTimeout(() => {
-                removeFence(fence.x, fence.y);
-              }, 500);
-              (e.currentTarget as HTMLElement).dataset.longPressTimer = String(timer);
-            }}
-            onMouseUp={(e) => {
-              const timer = (e.currentTarget as HTMLElement).dataset.longPressTimer;
-              if (timer) {
-                clearTimeout(parseInt(timer));
-                delete (e.currentTarget as HTMLElement).dataset.longPressTimer;
-              }
-            }}
-            onMouseLeave={(e) => {
-              const timer = (e.currentTarget as HTMLElement).dataset.longPressTimer;
-              if (timer) {
-                clearTimeout(parseInt(timer));
-                delete (e.currentTarget as HTMLElement).dataset.longPressTimer;
-              }
-            }}
           />
+        ))}
+
+        {/* Render Hay Feeders */}
+        {hayFeeders?.map(feeder => (
+          <div
+            key={feeder.id}
+            className="absolute pointer-events-auto cursor-pointer"
+            style={{
+              left: `${feeder.x}px`,
+              top: `${feeder.y}px`,
+              width: '64px',
+              height: '64px',
+              zIndex: Math.floor((feeder.y / window.innerHeight) * 100) + 10
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (demolishMode) {
+                removeHayFeeder(feeder.id);
+              } else if (feeder.hay <= 0 && feed >= 1) {
+                // Refill empty hay feeder
+                refillHayFeeder(feeder.id);
+              }
+            }}
+          >
+            <img
+              src={feeder.hay > 0 ? '/slut.png' : '/slut-empty.png'}
+              className="w-full h-full object-contain"
+              style={{ imageRendering: 'pixelated' }}
+              alt="hay feeder"
+            />
+            {/* Hay Level Indicator */}
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-12 h-2 bg-black/40 rounded-full overflow-hidden border border-white/30">
+              <div
+                className="h-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-300"
+                style={{ width: `${feeder.hay}%` }}
+              />
+            </div>
+          </div>
         ))}
 
         <div className="absolute inset-0 z-0">
@@ -243,6 +333,23 @@ export function SheepPen() {
           <SheepEntity key={sheep.id} sheep={sheep} />
         ))}
 
+        {/* Drop Target Highlight */}
+        {pickUpMode && pickedUpSheepId && dropTargetPos && (
+          <div
+            className="absolute pointer-events-none z-40"
+            style={{
+              left: `${dropTargetPos.x}px`,
+              top: `${dropTargetPos.y}px`,
+              width: '32px',
+              height: '32px',
+              border: '3px dashed #22c55e',
+              borderRadius: '4px',
+              backgroundColor: 'rgba(34, 197, 94, 0.2)',
+              boxShadow: '0 0 10px rgba(34, 197, 94, 0.5)'
+            }}
+          />
+        )}
+
         {/* Render Feces */}
         {(feces || []).map(f => (
           <div
@@ -253,8 +360,8 @@ export function SheepPen() {
               top: `${Math.max(18, Math.min(82, f.y))}%`,
               transform: 'translate(-50%, -50%)',
               zIndex: Math.round(f.y) - 1,
-              width: '24px',
-              height: '24px'
+              width: '16px',
+              height: '16px'
             }}
           >
             <img src="/shit.png" className="w-full h-full object-contain" style={{ imageRendering: 'pixelated' }} alt="poop" />

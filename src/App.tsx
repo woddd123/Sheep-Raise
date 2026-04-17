@@ -1,24 +1,63 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion } from 'motion/react';
 import { useGameStore } from './store/gameStore';
-import { Droplets, Wheat, Heart, Coins, Star, Plus, Moon, Sun, Wrench, X, Maximize2, Volume2, VolumeX, ChevronRight, ChevronLeft, Hammer } from 'lucide-react';
+import { Droplets, Wheat, Heart, Coins, Star, Plus, Moon, Sun, Wrench, X, Maximize2, Volume2, VolumeX, ChevronRight, ChevronLeft, Hammer, Trash2, Hand, MapPin } from 'lucide-react';
 import { SheepPen } from './components/SheepPen';
+import { FarmSelector } from './components/FarmSelector';
 import { initAudio, playBaa } from './utils/audio';
 
 export default function App() {
-  const { level, exp, coins, sheepList, gameTick, addSheep, cleanAll, addCoins, timeOfDay, feces, penLevel, upgradePen, sellSheep, shearSheep, breedSheep, devSetState, wool, timeSpeed, dayCount, soundEnabled, setSoundEnabled, weather, windDirection, windStrength } = useGameStore();
+  const { level, exp, coins, gameTick, addSheep, cleanAll, addCoins, timeOfDay, sellSheep, shearSheep, sellWool, breedSheep, buyFeed, devSetState, wool, feed, timeSpeed, soundEnabled, setSoundEnabled, weather, windDirection, windStrength } = useGameStore();
 
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
   const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(false);
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
+  const [isFarmSelectorOpen, setIsFarmSelectorOpen] = useState(false);
+
+  // Floating coin animation
+  const [coinFloats, setCoinFloats] = useState<{ id: number, amount: number, key: string }[]>([]);
+  const prevCoinsRef = useRef(coins);
+  const floatIdRef = useRef(0);
+
+  useEffect(() => {
+    if (coins !== prevCoinsRef.current) {
+      const diff = coins - prevCoinsRef.current;
+      if (diff !== 0) {
+        const newFloat = { id: floatIdRef.current++, amount: diff, key: `float-${Date.now()}` };
+        setCoinFloats(prev => [...prev, newFloat]);
+        setTimeout(() => {
+          setCoinFloats(prev => prev.filter(f => f.id !== newFloat.id));
+        }, 1500);
+      }
+      prevCoinsRef.current = coins;
+    }
+  }, [coins]);
+
+  // Get current farm data
+  const farms = useGameStore(state => state.farms);
+  const currentFarmId = useGameStore(state => state.currentFarmId);
+  const currentFarm = farms.find(f => f.id === currentFarmId) || farms[0];
+  const sheepList = currentFarm?.sheepList || [];
+  const feces = currentFarm?.feces || [];
+  const fences = currentFarm?.fences || [];
+  const hayFeeders = currentFarm?.hayFeeders || [];
+  const dayCount = currentFarm?.dayCount || 1;
+  const penLevel = currentFarm?.penLevel || 1;
 
   const maxSheep = 4 + (penLevel || 1) * 4;
-  const upgradePenCost = (penLevel || 1) * 500;
-  const upgradePenLevelReq = (penLevel || 1) * 2;
   const penArea = (penLevel || 1) * 25; // Simple area calculation: 25sqm per level
 
   const buildMode = useGameStore(state => state.buildMode);
-  const toggleBuildMode = useGameStore(state => state.toggleBuildMode);
+  const setBuildMode = useGameStore(state => state.setBuildMode);
+  const demolishMode = useGameStore(state => state.demolishMode);
+  const toggleDemolishMode = useGameStore(state => state.toggleDemolishMode);
+  const pickUpMode = useGameStore(state => state.pickUpMode);
+  const togglePickUpMode = useGameStore(state => state.togglePickUpMode);
+  const hayFeederMode = useGameStore(state => state.hayFeederMode);
+  const setHayFeederMode = useGameStore(state => state.setHayFeederMode);
+
+  const [buildType, setBuildType] = useState<'fence' | 'hayFeeder' | null>(null);
+  const [showBuildDropdown, setShowBuildDropdown] = useState(false);
 
   const isNight = timeOfDay >= 19 || timeOfDay < 6;
   const hours = Math.floor(timeOfDay);
@@ -88,7 +127,7 @@ export default function App() {
       {/* Main Content Layer */}
       <div className="relative z-20 h-full w-full min-h-screen">
       {/* Top Header for Time and Progress */}
-      <div className="fixed top-4 left-0 right-0 z-50 px-4 pointer-events-none flex items-center justify-between gap-4">
+      <div className="fixed top-4 left-0 right-0 z-50 px-4 pointer-events-none flex items-center justify-between gap-4 isolate">
         {/* Day Display */}
         <div className="bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-white/40 flex items-center gap-2 font-mono text-sm pointer-events-auto font-bold text-slate-700">
           第 {dayCount || 1} 天
@@ -154,6 +193,81 @@ export default function App() {
             {weather === 'rainy' && '🌧️'}
             {weather === 'windy' && '💨'}
           </span>
+        </div>
+
+        {/* Build/Demolish Buttons in Top Bar */}
+        <div className="flex items-center gap-2 pointer-events-auto">
+          {/* Build Button with Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                if (buildMode || hayFeederMode) {
+                  setBuildMode(false);
+                  setHayFeederMode(false);
+                  setBuildType(null);
+                } else {
+                  setShowBuildDropdown(!showBuildDropdown);
+                }
+              }}
+              disabled={demolishMode}
+              className={`p-2 rounded-full shadow-sm border border-white/40 transition-all ${
+                buildMode || hayFeederMode
+                  ? 'bg-amber-500 text-white'
+                  : demolishMode
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'bg-white/80 text-slate-700 hover:bg-white'
+              }`}
+              title={buildMode || hayFeederMode ? '退出建造' : '建造'}
+            >
+              <Hammer className="w-4 h-4" />
+            </button>
+
+            {/* Dropdown */}
+            {showBuildDropdown && !buildMode && (
+              <div className="absolute top-full right-0 mt-1 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50 min-w-[140px]">
+                <button
+                  onClick={() => {
+                    setBuildType('fence');
+                    setBuildMode(true);
+                    setShowBuildDropdown(false);
+                  }}
+                  disabled={coins < 5}
+                  className="w-full px-4 py-2.5 text-left text-sm font-bold hover:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <span className="w-5 h-5 bg-amber-500 text-white rounded flex items-center justify-center text-xs">F</span>
+                  栅栏块 (5)
+                </button>
+                <button
+                  onClick={() => {
+                    setBuildType('hayFeeder');
+                    setHayFeederMode(true);
+                    setShowBuildDropdown(false);
+                  }}
+                  disabled={coins < 20}
+                  className="w-full px-4 py-2.5 text-left text-sm font-bold hover:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <span className="w-5 h-5 bg-amber-500 text-white rounded flex items-center justify-center text-xs">H</span>
+                  饲料槽 (20)
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Demolish Button */}
+          <button
+            onClick={toggleDemolishMode}
+            disabled={buildMode}
+            className={`p-2 rounded-full shadow-sm border border-white/40 transition-all ${
+              demolishMode
+                ? 'bg-red-500 text-white'
+                : buildMode
+                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  : 'bg-white/80 text-slate-700 hover:bg-white'
+            }`}
+            title={demolishMode ? '退出拆除' : '拆除'}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Sound Toggle */}
@@ -254,21 +368,42 @@ export default function App() {
         animate={{ x: isLeftPanelOpen ? 0 : 'calc(-100% + 32px)' }}
         transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
       >
-        <div className="bg-white/40 backdrop-blur-xl h-full w-[350px] sm:w-[450px] p-6 shadow-[10px_0_30px_rgba(0,0,0,0.1)] border-r border-white/50 overflow-y-auto pointer-events-auto flex flex-col">
+        <div className="bg-white/40 backdrop-blur-xl h-full w-[280px] sm:w-[320px] p-4 shadow-[10px_0_30px_rgba(0,0,0,0.1)] border-r border-white/50 overflow-y-auto pointer-events-auto flex flex-col">
           {/* Content of Management Panel */}
           <div className="flex flex-col gap-4 mb-6 border-b border-slate-100 pb-6">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl sm:text-3xl font-black text-green-700 tracking-tight">我的牧场</h1>
-              <div className="bg-green-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest">
-                Level {level}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl sm:text-3xl font-black text-green-700 tracking-tight">{currentFarm?.name || '我的牧场'}</h1>
+                <div className="bg-green-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest">
+                  Level {level}
+                </div>
               </div>
+              <button
+                onClick={() => setIsFarmSelectorOpen(true)}
+                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                title="切换牧场"
+              >
+                <MapPin className="w-5 h-5" />
+              </button>
             </div>
             <div className="flex items-center justify-between gap-4 mt-3">
-              <div className="flex flex-col">
+              <div className="flex flex-col relative">
                 <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">资产</span>
                 <div className="flex items-center gap-1 text-amber-600 font-black text-base">
                   <Coins className="w-4 h-4" /> {coins.toLocaleString()}
                 </div>
+                {/* Floating coin animations */}
+                {coinFloats.map(float => (
+                  <motion.div
+                    key={float.key}
+                    className={`absolute left-0 top-0 font-black text-sm ${float.amount > 0 ? 'text-green-500' : 'text-red-500'}`}
+                    initial={{ opacity: 1, y: 0 }}
+                    animate={{ opacity: 0, y: -40 }}
+                    transition={{ duration: 1.2, ease: 'easeOut' }}
+                  >
+                    {float.amount > 0 ? '+' : ''}{float.amount}$
+                  </motion.div>
+                ))}
               </div>
               <div className="flex flex-col border-l border-slate-100 pl-4">
                 <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">面积</span>
@@ -284,55 +419,90 @@ export default function App() {
               </div>
             </div>
             
-            <div className="flex gap-3 mt-4">
-              <button 
+            <div className="grid grid-cols-5 gap-2 mt-4">
+              <button
                 onClick={addSheep}
                 disabled={coins < 50 || sheepList.length >= maxSheep}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white px-4 py-2.5 rounded-2xl flex items-center justify-center gap-2 text-sm font-black transition-all shadow-[0_4px_0_rgb(22,101,52)] active:shadow-none active:translate-y-1"
+                className="aspect-square rounded-xl bg-white/30 backdrop-blur-md border border-white/40 flex flex-col items-center justify-center gap-1 text-[10px] font-bold text-green-700 disabled:opacity-40 disabled:text-slate-400 transition-all hover:bg-white/50 active:scale-95 shadow-lg"
               >
-                <Plus className="w-4 h-4" /> 买羊 (50)
+                <Plus className="w-5 h-5" />
+                <span>买羊</span>
               </button>
-              <button 
+              <button
+                onClick={cleanAll}
+                disabled={coins < 10 || !(feces?.length > 0)}
+                className="aspect-square rounded-xl bg-white/30 backdrop-blur-md border border-white/40 flex flex-col items-center justify-center gap-1 text-[10px] font-bold text-blue-700 disabled:opacity-40 disabled:text-slate-400 transition-all hover:bg-white/50 active:scale-95 shadow-lg"
+              >
+                <Droplets className="w-5 h-5" />
+                <span>清理</span>
+              </button>
+              <button
+                onClick={() => {
+                  sheepList.filter(s => s.stage === 'ADULT' && (s.woolGrowth || 0) >= 100 && s.health > 0).forEach(s => shearSheep(s.id));
+                }}
+                disabled={!sheepList.some(s => s.stage === 'ADULT' && (s.woolGrowth || 0) >= 100 && s.health > 0)}
+                className="aspect-square rounded-xl bg-white/30 backdrop-blur-md border border-white/40 flex flex-col items-center justify-center gap-1 text-[10px] font-bold text-cyan-700 disabled:opacity-40 disabled:text-slate-400 transition-all hover:bg-white/50 active:scale-95 shadow-lg"
+              >
+                <span className="text-lg">🧶</span>
+                <span>剪毛</span>
+              </button>
+              <button
+                onClick={togglePickUpMode}
+                className={`aspect-square rounded-xl backdrop-blur-md border flex flex-col items-center justify-center gap-1 text-[10px] font-bold transition-all hover:bg-white/50 active:scale-95 shadow-lg ${
+                  pickUpMode
+                    ? 'bg-green-400/40 border-green-400/60 text-green-800'
+                    : 'bg-white/30 border-white/40 text-slate-700'
+                }`}
+              >
+                <Hand className="w-5 h-5" />
+                <span>{pickUpMode ? '取消' : '抓起'}</span>
+              </button>
+              <button
                 onClick={() => setIsDevPanelOpen(true)}
-                className="bg-slate-800 hover:bg-slate-900 text-white p-2.5 rounded-2xl transition-all shadow-[0_4px_0_rgb(30,41,59)] active:shadow-none active:translate-y-1"
+                className="aspect-square rounded-xl bg-white/30 backdrop-blur-md border border-white/40 flex flex-col items-center justify-center gap-1 text-[10px] font-bold text-slate-600 transition-all hover:bg-white/50 active:scale-95 shadow-lg"
                 title="开发者面板"
               >
                 <Wrench className="w-5 h-5" />
+                <span>设置</span>
               </button>
             </div>
           </div>
 
-          {/* Action Grid */}
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={cleanAll}
-              disabled={coins < 10 || !(feces?.length > 0)}
-              className="group relative bg-blue-500 hover:bg-blue-600 disabled:bg-slate-100 disabled:text-slate-400 text-white p-4 rounded-2xl flex flex-col items-center gap-2 text-sm font-black shadow-[0_4px_0_rgb(29,78,216)] active:shadow-none active:translate-y-1 transition-all overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <Droplets className="w-6 h-6" />
-              <span>清理粪便 (10)</span>
-            </button>
-            <button
-              onClick={upgradePen}
-              disabled={coins < upgradePenCost || level < upgradePenLevelReq}
-              className="group relative bg-purple-500 hover:bg-purple-600 disabled:bg-slate-100 disabled:text-slate-400 text-white p-4 rounded-2xl flex flex-col items-center gap-2 text-sm font-black shadow-[0_4px_0_rgb(126,34,206)] active:shadow-none active:translate-y-1 transition-all overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <Plus className="w-6 h-6" />
-              <div className="flex flex-col items-center">
-                <span>扩建 ({upgradePenCost})</span>
-                {level < upgradePenLevelReq && <span className="text-[9px] font-bold opacity-70">需Lv.{upgradePenLevelReq}</span>}
-              </div>
-            </button>
-            <button
-              onClick={toggleBuildMode}
-              className={`group relative ${buildMode ? 'bg-amber-500 hover:bg-amber-600 shadow-[0_4px_0_rgb(217,119,6)]' : 'bg-slate-500 hover:bg-slate-600 shadow-[0_4px_0_rgb(71,85,105)]'} text-white p-4 rounded-2xl flex flex-col items-center gap-2 text-sm font-black active:shadow-none active:translate-y-1 transition-all overflow-hidden`}
-            >
-              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <Hammer className="w-6 h-6" />
-              <span>{buildMode ? '退出建造' : '建造栅栏 (5)'}</span>
-            </button>
+          {/* Sheep Status in Control Panel */}
+          <div className="mt-4 flex flex-col gap-2">
+            <h3 className="text-sm font-bold text-slate-700">羊群状态 ({sheepList.length}/{maxSheep})</h3>
+            <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: '160px' }}>
+              {sheepList.slice(0, 6).map(sheep => (
+                <div key={sheep.id} className="flex items-center gap-2 p-2 rounded-xl bg-white/30 backdrop-blur-md border border-white/40">
+                  <span className="text-xl">{sheep.health <= 0 ? '💀' : '🐑'}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-bold text-slate-700 truncate">{sheep.name}</span>
+                      <span className="text-[10px] text-slate-400">{sheep.gender === 'MALE' ? '♂️' : '♀️'}</span>
+                      <span className="text-[10px] px-1 rounded bg-slate-100 text-slate-500">{sheep.stage === 'BABY' ? '宝宝' : sheep.stage === 'GROWING' ? '幼年' : '成年'}</span>
+                      {sheep.gender === 'FEMALE' && sheep.isPregnant && <span className="text-[10px] px-1 rounded bg-pink-200 text-pink-700 font-bold">怀孕</span>}
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                      <span>❤{Math.round(sheep.health)}</span>
+                      <span>饱{Math.round(sheep.hunger)}</span>
+                      {sheep.stage === 'ADULT' && <span>毛{Math.round(sheep.woolGrowth || 0)}%</span>}
+                    </div>
+                  </div>
+                  {sheep.health > 0 && (
+                    <button
+                      onClick={() => sellSheep(sheep.id)}
+                      className="w-8 h-8 rounded-lg bg-amber-100/50 backdrop-blur-md border border-amber-200/50 flex items-center justify-center text-amber-600 hover:bg-amber-200/60 active:scale-95 transition-all"
+                      title="出售"
+                    >
+                      <span className="text-sm">💰</span>
+                    </button>
+                  )}
+                </div>
+              ))}
+              {sheepList.length > 6 && (
+                <div className="text-xs text-slate-400 text-center py-1">还有 {sheepList.length - 6} 只羊...</div>
+              )}
+            </div>
           </div>
 
           {/* Experience Bar */}
@@ -359,13 +529,13 @@ export default function App() {
         </div>
         
         {/* Pull Handle Left */}
-        <motion.div 
+        <motion.div
           className="bg-white/40 backdrop-blur-xl h-24 w-8 rounded-r-2xl border-y border-r border-white/50 flex items-center justify-center shadow-[4px_0_10px_rgba(0,0,0,0.05)] cursor-pointer pointer-events-auto ml-[-1px] transition-colors hover:bg-white/60 active:bg-white/30"
-          onClick={() => setIsLeftPanelOpen(!isLeftPanelOpen)}
+          onClick={() => { setIsLeftPanelOpen(!isLeftPanelOpen); setIsRightPanelOpen(false); }}
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}
           onDragEnd={(e, info) => {
-            if (info.offset.x > 50) setIsLeftPanelOpen(true);
+            if (info.offset.x > 50) { setIsLeftPanelOpen(true); setIsRightPanelOpen(false); }
             if (info.offset.x < -50) setIsLeftPanelOpen(false);
           }}
         >
@@ -374,85 +544,75 @@ export default function App() {
       </motion.div>
 
       {/* Right Drawer - Sheep Status */}
-      <motion.div 
+      <motion.div
         className="fixed right-0 top-0 bottom-0 z-50 flex items-center h-full pointer-events-none"
         initial={false}
         animate={{ x: isRightPanelOpen ? 0 : 'calc(100% - 32px)' }}
         transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
       >
         {/* Pull Handle Right */}
-        <motion.div 
+        <motion.div
           className="bg-white/40 backdrop-blur-xl h-24 w-8 rounded-l-2xl border-y border-l border-white/50 flex items-center justify-center shadow-[-4px_0_10px_rgba(0,0,0,0.05)] cursor-pointer pointer-events-auto mr-[-1px] transition-colors hover:bg-white/60 active:bg-white/30"
-          onClick={() => setIsRightPanelOpen(!isRightPanelOpen)}
+          onClick={() => { setIsRightPanelOpen(!isRightPanelOpen); setIsLeftPanelOpen(false); }}
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}
           onDragEnd={(e, info) => {
-            if (info.offset.x < -50) setIsRightPanelOpen(true);
+            if (info.offset.x < -50) { setIsRightPanelOpen(true); setIsLeftPanelOpen(false); }
             if (info.offset.x > 50) setIsRightPanelOpen(false);
           }}
         >
           {isRightPanelOpen ? <ChevronRight className="w-5 h-5 text-slate-600" /> : <ChevronLeft className="w-5 h-5 text-slate-600" />}
         </motion.div>
 
-        <div className="bg-white/40 backdrop-blur-xl h-full w-[350px] sm:w-[450px] p-6 shadow-[-10px_0_30px_rgba(0,0,0,0.1)] border-l border-white/50 overflow-y-auto pointer-events-auto flex flex-col">
-          <div className="flex flex-col mb-4 gap-1">
-            <h2 className="text-lg font-bold text-slate-800">羊群状态 ({sheepList.length}/{maxSheep})</h2>
-            <span className="text-xs text-slate-500">将鼠标悬停在小羊上可查看详细状态</span>
+        <div className="bg-white/40 backdrop-blur-xl h-full w-[280px] sm:w-[320px] p-4 shadow-[-10px_0_30px_rgba(0,0,0,0.1)] border-l border-white/50 overflow-y-auto pointer-events-auto flex flex-col">
+          <div className="flex flex-col mb-3 gap-1">
+            <h2 className="text-lg font-bold text-slate-800">背包</h2>
+            <span className="text-xs text-slate-500">存放羊毛、羊皮和饲料等物品</span>
           </div>
-          
-          <div className="flex flex-col gap-4">
-            {sheepList.map(sheep => (
-              <div key={sheep.id} className={`bg-slate-50 rounded-xl p-4 border relative overflow-hidden flex items-center gap-3 ${sheep.health <= 0 ? 'border-red-200 bg-red-50/50' : 'border-slate-100'}`}>
-                {sheep.health <= 0 && <div className="absolute inset-0 bg-red-900/5 z-0 pointer-events-none" />}
-                {sheep.health > 0 && sheep.health < 50 && <div className="absolute top-0 left-0 w-full h-1 bg-red-500 animate-pulse" />}
-                <div className="text-3xl relative z-10">{sheep.health <= 0 ? '💀' : '🐑'}</div>
-                <div className="relative z-10 w-full">
-                  <h3 className={`font-bold text-sm ${sheep.health <= 0 ? 'text-red-600' : ''}`}>
-                    {sheep.name} {sheep.gender === 'MALE' ? '♂️' : '♀️'} {sheep.health <= 0 && '(已死亡)'}
-                  </h3>
-                  <div className="text-xs text-slate-500 mt-1">
-                    健康: {Math.round(sheep.health)} | 饱食: {Math.round(sheep.hunger)}
-                  </div>
-                  
-                  {/* Actions */}
-                  {sheep.health > 0 && (
-                    <div className="mt-2 flex gap-2 flex-wrap">
-                      {sheep.stage === 'ADULT' ? (
-                        <>
-                          <button 
-                            onClick={() => shearSheep(sheep.id)}
-                            disabled={(sheep.woolGrowth || 0) < 100}
-                            className={`px-2 py-1 text-xs rounded font-bold transition-colors ${(sheep.woolGrowth || 0) >= 100 ? 'bg-blue-500 text-white hover:bg-blue-600' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
-                          >
-                            剪毛 ({Math.floor(sheep.woolGrowth || 0)}%)
-                          </button>
-                          <button 
-                            onClick={() => breedSheep(sheep.id)}
-                            disabled={(sheep.age - (sheep.lastBredAge || 0) < 600 && (sheep.lastBredAge || 0) !== 0) || sheepList.filter(s => s.stage === 'ADULT' && s.health > 0 && s.id !== sheep.id).length === 0}
-                            className={`px-2 py-1 text-xs rounded font-bold transition-colors ${((sheep.age - (sheep.lastBredAge || 0) >= 600 || (sheep.lastBredAge || 0) === 0) && sheepList.filter(s => s.stage === 'ADULT' && s.health > 0 && s.id !== sheep.id).length > 0) ? 'bg-pink-500 text-white hover:bg-pink-600' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
-                          >
-                            繁育
-                          </button>
-                          <button 
-                            onClick={() => sellSheep(sheep.id)}
-                            className="px-2 py-1 text-xs rounded font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors"
-                          >
-                            出售 (150)
-                          </button>
-                        </>
-                      ) : (
-                        <button 
-                          onClick={() => sellSheep(sheep.id)}
-                          className="px-2 py-1 text-xs rounded font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors"
-                        >
-                          出售 ({sheep.stage === 'GROWING' ? 80 : 30})
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+
+          <div className="grid grid-cols-4 gap-3">
+            {/* Wool */}
+            <div className="bg-blue-50 rounded-xl p-3 flex flex-col items-center gap-1 border border-blue-100">
+              <div className="text-2xl">🧶</div>
+              <div className="text-xs font-bold text-blue-600">羊毛</div>
+              <div className="text-sm font-black text-blue-800">{wool}</div>
+            </div>
+            {/* Placeholder items */}
+            <div className="bg-slate-50 rounded-xl p-3 flex flex-col items-center gap-1 border border-slate-100 opacity-50">
+              <div className="text-2xl">🐑</div>
+              <div className="text-xs font-bold text-slate-500">羊皮</div>
+              <div className="text-sm font-black text-slate-400">0</div>
+            </div>
+            <div className="bg-amber-50 rounded-xl p-3 flex flex-col items-center gap-1 border border-amber-100">
+              <div className="text-2xl">🌾</div>
+              <div className="text-xs font-bold text-amber-600">饲料</div>
+              <div className="text-sm font-black text-amber-800">{feed}</div>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3 flex flex-col items-center gap-1 border border-slate-100 opacity-50">
+              <div className="text-2xl">❓</div>
+              <div className="text-xs font-bold text-slate-500">更多</div>
+              <div className="text-sm font-black text-slate-400">-</div>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-col gap-2">
+            <h3 className="text-sm font-bold text-slate-700">快捷操作</h3>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={sellWool}
+                disabled={wool <= 0}
+                className="w-full bg-amber-100 hover:bg-amber-200 disabled:bg-slate-100 disabled:text-slate-400 text-amber-700 px-4 py-2 rounded-xl text-sm font-bold transition-colors"
+              >
+                出售所有羊毛 ({wool}个)
+              </button>
+              <button
+                onClick={buyFeed}
+                disabled={coins < 10}
+                className="w-full bg-green-100 hover:bg-green-200 disabled:bg-slate-100 disabled:text-slate-400 text-green-700 px-4 py-2 rounded-xl text-sm font-bold transition-colors"
+              >
+                购买饲料 (10金币)
+              </button>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -472,83 +632,92 @@ export default function App() {
             <div className="p-4 sm:p-6 flex flex-col gap-4 overflow-y-auto">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">金币 (Coins)</label>
-                <input 
-                  type="number" 
-                  value={coins} 
+                <input
+                  type="number"
+                  value={coins}
                   onChange={(e) => devSetState({ coins: Number(e.target.value) })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">等级 (Level)</label>
-                <input 
-                  type="number" 
-                  value={level} 
+                <input
+                  type="number"
+                  value={level}
                   onChange={(e) => devSetState({ level: Number(e.target.value) })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">经验 (Exp)</label>
-                <input 
-                  type="number" 
-                  value={exp} 
+                <label className="block text-sm font-bold text-slate-700 mb-1">经验 (EXP)</label>
+                <input
+                  type="number"
+                  value={exp}
                   onChange={(e) => devSetState({ exp: Number(e.target.value) })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">羊圈等级 (Pen Level)</label>
-                <input 
-                  type="number" 
-                  value={penLevel} 
-                  onChange={(e) => devSetState({ penLevel: Number(e.target.value) })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">羊毛 (Wool)</label>
-                <input 
-                  type="number" 
-                  value={wool} 
+                <input
+                  type="number"
+                  value={wool}
                   onChange={(e) => devSetState({ wool: Number(e.target.value) })}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">时间 (Time of Day: 0-24)</label>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="24" 
+                <label className="block text-sm font-bold text-slate-700 mb-1">天气 (Weather)</label>
+                <select
+                  value={weather}
+                  onChange={(e) => devSetState({ weather: e.target.value as 'sunny' | 'rainy' | 'windy' })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="sunny">晴天</option>
+                  <option value="rainy">雨天</option>
+                  <option value="windy">刮风</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">风向 (Wind Direction)</label>
+                <input
+                  type="number"
+                  value={windDirection}
+                  onChange={(e) => devSetState({ windDirection: Number(e.target.value) })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">风力 (Wind Strength)</label>
+                <input
+                  type="number"
+                  value={windStrength}
+                  onChange={(e) => devSetState({ windStrength: Number(e.target.value) })}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">时间 ({timeString})</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="24"
                   step="0.1"
-                  value={timeOfDay} 
+                  value={timeOfDay}
                   onChange={(e) => devSetState({ timeOfDay: Number(e.target.value) })}
                   className="w-full"
                 />
-                <div className="text-right text-xs text-slate-500 mt-1">{timeOfDay.toFixed(1)}</div>
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">时间流速 (Time Speed)</label>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="100" 
-                  step="1"
-                  value={timeSpeed || 1} 
-                  onChange={(e) => devSetState({ timeSpeed: Number(e.target.value) })}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-slate-500 mt-1">
-                  <span>暂停 (0x)</span>
-                  <span>{timeSpeed || 1}x</span>
-                  <span>极速 (100x)</span>
-                </div>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Farm Selector Modal */}
+      <FarmSelector
+        isOpen={isFarmSelectorOpen}
+        onClose={() => setIsFarmSelectorOpen(false)}
+      />
       </div>
     </div>
   );

@@ -7,7 +7,16 @@ import { playBaa } from '../utils/audio';
 export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
   const timeOfDay = useGameStore(state => state.timeOfDay);
   const soundEnabled = useGameStore(state => state.soundEnabled);
-  const fences = useGameStore(state => state.fences);
+  const farms = useGameStore(state => state.farms);
+  const currentFarmId = useGameStore(state => state.currentFarmId);
+  const currentFarm = farms.find(f => f.id === currentFarmId) || farms[0];
+  const fences = currentFarm?.fences || [];
+  const hayFeeders = currentFarm?.hayFeeders || [];
+  const pickUpMode = useGameStore(state => state.pickUpMode);
+  const pickedUpSheepId = useGameStore(state => state.pickedUpSheepId);
+  const setPickedUpSheepId = useGameStore(state => state.setPickedUpSheepId);
+  const dropTargetPos = useGameStore(state => state.dropTargetPos);
+  const setDropTargetPos = useGameStore(state => state.setDropTargetPos);
   const weather = useGameStore(state => state.weather);
   const windDirection = useGameStore(state => state.windDirection);
   const windStrength = useGameStore(state => state.windStrength);
@@ -27,6 +36,10 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
   // Keep fences ref updated
   const fencesRef = useRef(fences);
   useEffect(() => { fencesRef.current = fences; }, [fences]);
+
+  // Keep hayFeeders ref updated
+  const hayFeedersRef = useRef(hayFeeders);
+  useEffect(() => { hayFeedersRef.current = hayFeeders; }, [hayFeeders]);
 
   // Collision detection for fences (32x32px grid)
   const FENCE_SIZE = 32;
@@ -49,7 +62,10 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
     const sheepPixelY = (targetYPercent / 100) * containerRect.height;
 
     // Use a large collision radius - the sheep should be fully blocked by fence
-    const sheepSize = sheep.stage === 'BABY' ? 32 : sheep.stage === 'GROWING' ? 48 : 64;
+    // Female adult is 10% smaller than male adult
+    const sheepSize = sheep.stage === 'BABY' ? 32 :
+                      sheep.stage === 'GROWING' ? 48 :
+                      (sheep.gender === 'FEMALE' && sheep.stage === 'ADULT') ? 56 : 64;
     const collisionRadius = sheepSize * 0.6;
 
     for (const fence of fencesRef.current) {
@@ -133,7 +149,28 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [isDefecating, setIsDefecating] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
+  const isPickedUp = pickedUpSheepId === sheep.id;
+
+  // Update position when being picked up and dropped - sheep follows cursor continuously
+  useEffect(() => {
+    // Move sheep when dropTargetPos is set (and this is the picked up sheep)
+    if (dropTargetPos && pickedUpSheepId === sheep.id) {
+      // Get the container to calculate percentage position
+      const sheepEl = document.getElementById(`sheep-${sheep.id}`);
+      const containerEl = sheepEl?.parentElement;
+      if (containerEl) {
+        const containerRect = containerEl.getBoundingClientRect();
+        const newX = ((dropTargetPos.x + 16) / containerRect.width) * 100; // +16 to center on grid cell
+        const newY = ((dropTargetPos.y + 16) / containerRect.height) * 100;
+        setPos({ x: newX, y: newY });
+      }
+    }
+  }, [dropTargetPos, pickedUpSheepId, sheep.id]);
+  const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragStartPos = useRef<{ x: number, y: number } | null>(null);
   const isDefecatingRef = useRef(false);
 
   // Defecation logic
@@ -189,6 +226,7 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
   const removeGrass = useGameStore(state => state.removeGrass);
   const clearCorpse = useGameStore(state => state.clearCorpse);
   const addGrassTrail = useGameStore(state => state.addGrassTrail);
+  const consumeHay = useGameStore(state => state.consumeHay);
 
   const isDead = sheep.health <= 0;
   const isDeadRef = useRef(isDead);
@@ -237,7 +275,7 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
 
   useEffect(() => {
     const moveInterval = setInterval(() => {
-      if (isNightRef.current || isDeadRef.current || isEatingRef.current) {
+      if (isNightRef.current || isDeadRef.current || isEatingRef.current || isDraggingRef.current) {
         setIsMoving(false);
         return;
       }
@@ -248,37 +286,37 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
       const needsFood = currentSheep.hunger < 90;
 
       if (needsFood) {
-        // Find the nearest grass element
-        const grassElements = document.querySelectorAll('[id^="grass-dec-"]');
-        let nearestGrass: Element | null = null;
-        let minDistance = Infinity;
-        let targetX = 0;
-        let targetY = 0;
+        // Get latest hay feeders from ref
+        const allHayFeeders = hayFeedersRef.current;
+        const feedersWithFood = allHayFeeders.filter(f => f.hay > 0);
+        let nearestHayFeeder: typeof allHayFeeders[0] | null = null;
+        let minHayDistance = Infinity;
+        let hayTargetX = 0;
+        let hayTargetY = 0;
 
-        grassElements.forEach(el => {
-          // Check if it's already trampled (frame !== -1), if so skip
-          const img = el.querySelector('img');
-          if (img && !img.src.includes('grass.png')) return;
+        // Get container for position calculation
+        const containerEl = document.getElementById('sheep-pen-container');
+        const containerRect = containerEl?.getBoundingClientRect();
 
-          const rect = el.getBoundingClientRect();
-          const parentRect = el.parentElement?.getBoundingClientRect();
-          if (!parentRect) return;
+        feedersWithFood.forEach(feeder => {
+          if (!containerRect) return;
+          // Hay feeder center in percentage (feeder is 2x2 grid cells = 64x64px)
+          const fX = ((feeder.x + 32) / containerRect.width) * 100;
+          const fY = ((feeder.y + 32) / containerRect.height) * 100;
 
-          // Calculate center of grass in percentage of parent container
-          const gX = ((rect.left - parentRect.left + rect.width / 2) / parentRect.width) * 100;
-          const gY = ((rect.top - parentRect.top + rect.height / 2) / parentRect.height) * 100;
-
-          const dist = Math.sqrt(Math.pow(gX - prevPos.x, 2) + Math.pow(gY - prevPos.y, 2));
-          if (dist < minDistance) {
-            minDistance = dist;
-            nearestGrass = el;
-            targetX = gX;
-            targetY = gY;
+          const dist = Math.sqrt(Math.pow(fX - prevPos.x, 2) + Math.pow(fY - prevPos.y, 2));
+          if (dist < minHayDistance) {
+            minHayDistance = dist;
+            nearestHayFeeder = feeder;
+            hayTargetX = fX;
+            hayTargetY = fY;
           }
         });
 
-        if (nearestGrass) {
-          if (minDistance > 5) {
+        // If there's a hay feeder with food, ALWAYS prefer it when hungry
+        if (nearestHayFeeder) {
+          // Move to hay feeder
+          if (minHayDistance > 5) {
             const step = 5;
 
             // First check if current position is already in collision - if so, try to escape first
@@ -300,35 +338,28 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
               return;
             }
 
-            // Determine primary direction towards grass (horizontal or vertical)
-            const dX = targetX - prevPos.x;
-            const dY = targetY - prevPos.y;
+            const dX = hayTargetX - prevPos.x;
+            const dY = hayTargetY - prevPos.y;
             let newX = prevPos.x;
             let newY = prevPos.y;
 
-            // Move in the primary direction towards grass
             if (Math.abs(dX) > Math.abs(dY)) {
-              // Horizontal primary
               newX = prevPos.x + Math.sign(dX) * step;
             } else {
-              // Vertical primary
               newY = prevPos.y + Math.sign(dY) * step;
             }
 
             newX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newX));
             newY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newY));
 
-            // Check fence collision before moving
             let windMult = 1;
             if (checkFenceCollision(newX, newY)) {
-              // Try orthogonal directions to go around
               const altMove = tryOrthogonalMove(prevPos.x, prevPos.y, step);
               if (altMove) {
                 newX = altMove.newX;
                 newY = altMove.newY;
                 windMult = altMove.windMultiplier || 1;
               } else {
-                // Completely blocked, skip this movement
                 return;
               }
             }
@@ -347,38 +378,142 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
             setTimeout(() => setIsMoving(false), calculatedDuration * 1000);
             setPos({ x: newX, y: newY });
           } else {
-            // Close enough to grass, start eating
+            // Close enough to hay feeder, start eating
             setIsEating(true);
             setIsMoving(false);
-            
-            // Face the grass
-            setFacingRight(targetX > prevPos.x);
+            setFacingRight(hayTargetX > prevPos.x);
 
-            // Extract grass ID to remove it later
-            const grassId = nearestGrass.id.replace('grass-', '');
-
-            // Eat for 10 seconds, recovering hunger progressively
+            // Eat from hay feeder for 10 seconds
             let eatTicks = 0;
+            const feedId = nearestHayFeeder!.id;
             const eatTimer = setInterval(() => {
               eatTicks++;
-              eatGrass(currentSheep.id, 10); // Recover 10 hunger per second, total 100 in 10s
+              consumeHay(feedId, 10); // Consume 10 hay per second
+              eatGrass(currentSheep.id, 10); // Recover 10 hunger per second
               if (eatTicks >= 10 || isDeadRef.current || isNightRef.current) {
                 clearInterval(eatTimer);
                 setIsEating(false);
-                
-                // If finished eating successfully, remove the grass
-                if (eatTicks >= 10) {
-                  removeGrass(grassId);
-                }
               }
             }, 1000);
           }
         } else {
-          // No grass found, just wander
-          randomWander();
+          // No hay feeder with food, find grass
+          const grassElements = document.querySelectorAll('[id^="grass-dec-"]');
+          let nearestGrass: Element | null = null;
+          let minGrassDistance = Infinity;
+          let grassTargetX = 0;
+          let grassTargetY = 0;
+
+          grassElements.forEach(el => {
+            const img = el.querySelector('img');
+            if (img && !img.src.includes('grass.png')) return;
+
+            const rect = el.getBoundingClientRect();
+            const parentRect = el.parentElement?.getBoundingClientRect();
+            if (!parentRect) return;
+
+            const gX = ((rect.left - parentRect.left + rect.width / 2) / parentRect.width) * 100;
+            const gY = ((rect.top - parentRect.top + rect.height / 2) / parentRect.height) * 100;
+
+            const dist = Math.sqrt(Math.pow(gX - prevPos.x, 2) + Math.pow(gY - prevPos.y, 2));
+            if (dist < minGrassDistance) {
+              minGrassDistance = dist;
+              nearestGrass = el;
+              grassTargetX = gX;
+              grassTargetY = gY;
+            }
+          });
+
+          if (nearestGrass) {
+            if (minGrassDistance > 5) {
+              const step = 5;
+
+              // First check if current position is already in collision - if so, try to escape first
+              if (checkFenceCollision(prevPos.x, prevPos.y)) {
+                const escapeMove = tryOrthogonalMove(prevPos.x, prevPos.y, step * 2);
+                if (escapeMove) {
+                  const actualDx = escapeMove.newX - prevPos.x;
+                  const actualDy = escapeMove.newY - prevPos.y;
+                  const actualDist = Math.sqrt(actualDx * actualDx + actualDy * actualDy);
+                  const windMult = escapeMove.windMultiplier || 1;
+                  const escDuration = Math.min((actualDist / 15) * 1.8, 4.0) / windMult;
+                  setMoveDuration(escDuration);
+                  setFacingRight(escapeMove.newX > prevPos.x);
+                  setIsMoving(true);
+                  addGrassTrail(prevPos.x, prevPos.y);
+                  setTimeout(() => setIsMoving(false), escDuration * 1000);
+                  setPos({ x: escapeMove.newX, y: escapeMove.newY });
+                }
+                return;
+              }
+
+              const dX = grassTargetX - prevPos.x;
+              const dY = grassTargetY - prevPos.y;
+              let newX = prevPos.x;
+              let newY = prevPos.y;
+
+              if (Math.abs(dX) > Math.abs(dY)) {
+                newX = prevPos.x + Math.sign(dX) * step;
+              } else {
+                newY = prevPos.y + Math.sign(dY) * step;
+              }
+
+              newX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newX));
+              newY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newY));
+
+              let windMult = 1;
+              if (checkFenceCollision(newX, newY)) {
+                const altMove = tryOrthogonalMove(prevPos.x, prevPos.y, step);
+                if (altMove) {
+                  newX = altMove.newX;
+                  newY = altMove.newY;
+                  windMult = altMove.windMultiplier || 1;
+                } else {
+                  return;
+                }
+              }
+
+              const actualDx = newX - prevPos.x;
+              const actualDy = newY - prevPos.y;
+              const actualDist = Math.sqrt(actualDx * actualDx + actualDy * actualDy);
+
+              const calculatedDuration = Math.min((actualDist / 15) * 1.8, 4.0) / windMult;
+              setMoveDuration(calculatedDuration);
+
+              setFacingRight(newX > prevPos.x);
+              setIsMoving(true);
+              addGrassTrail(prevPos.x, prevPos.y);
+
+              setTimeout(() => setIsMoving(false), calculatedDuration * 1000);
+              setPos({ x: newX, y: newY });
+            } else {
+              // Close enough to grass, start eating
+              setIsEating(true);
+              setIsMoving(false);
+              setFacingRight(grassTargetX > prevPos.x);
+
+              const grassId = nearestGrass.id.replace('grass-', '');
+
+              let eatTicks = 0;
+              const eatTimer = setInterval(() => {
+                eatTicks++;
+                eatGrass(currentSheep.id, 10);
+                if (eatTicks >= 10 || isDeadRef.current || isNightRef.current) {
+                  clearInterval(eatTimer);
+                  setIsEating(false);
+                  if (eatTicks >= 10) {
+                    removeGrass(grassId);
+                  }
+                }
+              }, 1000);
+            }
+          } else {
+            // No grass found, just wander
+            randomWander();
+          }
         }
       } else {
-        // Random wander
+        // Not hungry, just wander
         randomWander();
       }
 
@@ -414,13 +549,22 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
     }, 2000); // Decide to move every 2 seconds
 
     return () => clearInterval(moveInterval);
-  }, [eatGrass, fences]);
+  }, [eatGrass, fences, consumeHay]);
 
   const handleSheepClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     if (isDead) {
       clearCorpse(sheep.id);
+      return;
+    }
+
+    // If in pickUpMode and not already picked up, pick up this sheep
+    if (pickUpMode && !pickedUpSheepId) {
+      setPickedUpSheepId(sheep.id);
+      if (soundEnabled) {
+        playBaa(0.5);
+      }
       return;
     }
 
@@ -436,11 +580,133 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
     } else {
       // Single click potential
       clickTimer.current = setTimeout(() => {
-        setShowStatus(prev => !prev);
+        if (!isDraggingRef.current) {
+          setShowStatus(prev => !prev);
+        }
         clickTimer.current = null;
       }, 250); // 250ms window for double click
     }
   };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (isDead) return;
+    e.stopPropagation();
+
+    // Skip dragging setup if in pickUpMode (handled by click instead)
+    if (pickUpMode) return;
+
+    // Start long press timer for dragging
+    longPressTimer.current = setTimeout(() => {
+      isDraggingRef.current = true;
+      setIsDragging(true);
+      dragStartPos.current = { x: e.clientX, y: e.clientY };
+      if (soundEnabled) {
+        playBaa(0.5);
+      }
+    }, 300); // 300ms long press to start dragging
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (isDead) return;
+    e.stopPropagation();
+
+    // Skip dragging setup if in pickUpMode (handled by click instead)
+    if (pickUpMode) return;
+
+    const touch = e.touches[0];
+    // Start long press timer for dragging
+    longPressTimer.current = setTimeout(() => {
+      isDraggingRef.current = true;
+      setIsDragging(true);
+      dragStartPos.current = { x: touch.clientX, y: touch.clientY };
+      if (soundEnabled) {
+        playBaa(0.5);
+      }
+    }, 300); // 300ms long press to start dragging
+  };
+
+  // Handle pointer move at document level for smooth dragging (works with mouse and trackpad)
+  useEffect(() => {
+    const handleGlobalPointerMove = (e: PointerEvent) => {
+      if (!isDraggingRef.current) return;
+
+      const sheepEl = document.getElementById(`sheep-${sheep.id}`);
+      const containerEl = sheepEl?.parentElement;
+      if (!containerEl) return;
+
+      const containerRect = containerEl.getBoundingClientRect();
+
+      // Direct position - set sheep center to mouse position
+      const newX = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+      const newY = ((e.clientY - containerRect.top) / containerRect.height) * 100;
+
+      const clampedX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newX));
+      const clampedY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newY));
+
+      setPos({ x: clampedX, y: clampedY });
+    };
+
+    const handleGlobalPointerUp = () => {
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        dragStartPos.current = null;
+      }
+    };
+
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      if (!isDraggingRef.current) return;
+      e.preventDefault();
+
+      const touch = e.touches[0];
+      const sheepEl = document.getElementById(`sheep-${sheep.id}`);
+      const containerEl = sheepEl?.parentElement;
+      if (!containerEl) return;
+
+      const containerRect = containerEl.getBoundingClientRect();
+
+      // Direct position - set sheep center to touch position
+      const newX = ((touch.clientX - containerRect.left) / containerRect.width) * 100;
+      const newY = ((touch.clientY - containerRect.top) / containerRect.height) * 100;
+
+      const clampedX = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newX));
+      const clampedY = Math.max(MIN_BOUND, Math.min(MAX_BOUND, newY));
+
+      setPos({ x: clampedX, y: clampedY });
+    };
+
+    const handleGlobalTouchEnd = () => {
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        dragStartPos.current = null;
+      }
+    };
+
+    document.addEventListener('pointermove', handleGlobalPointerMove);
+    document.addEventListener('pointerup', handleGlobalPointerUp);
+    document.addEventListener('pointercancel', handleGlobalPointerUp);
+    document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+    document.addEventListener('touchend', handleGlobalTouchEnd);
+    document.addEventListener('touchcancel', handleGlobalTouchEnd);
+
+    return () => {
+      document.removeEventListener('pointermove', handleGlobalPointerMove);
+      document.removeEventListener('pointerup', handleGlobalPointerUp);
+      document.removeEventListener('pointercancel', handleGlobalPointerUp);
+      document.removeEventListener('touchmove', handleGlobalTouchMove);
+      document.removeEventListener('touchend', handleGlobalTouchEnd);
+      document.removeEventListener('touchcancel', handleGlobalTouchEnd);
+    };
+  }, [sheep.id]);
 
   const performKnockback = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -592,11 +858,14 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
       initial={false}
       animate={{ left: `${pos.x}%`, top: `${pos.y}%` }}
       transition={isKnockedBack ? { type: "spring", stiffness: 300, damping: 15 } : { duration: moveDuration, ease: "linear" }}
-      style={{ 
-        transform: `translate(-50%, -50%)`,
-        zIndex: Math.round(pos.y) + 20 // Ensure sheep renders above grass and fence correctly
+      style={{
+        transform: `translate(-50%, -50%) scale(${sheep.gender === 'FEMALE' && sheep.stage === 'ADULT' ? 0.9 : 1})`,
+        zIndex: Math.max(200, Math.round(pos.y) + 20), // Ensure sheep renders above UI (z-50) and elements
+        isolation: 'isolate'
       }}
       onClick={handleSheepClick}
+      onPointerDown={handlePointerDown}
+      onTouchStart={handleTouchStart}
     >
       <div className="relative group flex flex-col items-center">
         {/* Level Up Animation */}
@@ -611,6 +880,32 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
           </motion.div>
         )}
 
+        {/* Dragging Indicator */}
+        {isDragging && !isDead && (
+          <motion.div
+            className="absolute -top-8 text-orange-500 font-bold text-sm z-50 pointer-events-none drop-shadow-md whitespace-nowrap"
+            initial={{ y: 0, opacity: 0, scale: 0.8 }}
+            animate={{ y: -10, opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.2 }}
+          >
+            ✋ 被控制
+          </motion.div>
+        )}
+
+        {/* Picked Up Indicator */}
+        {isPickedUp && !isDead && (
+          <motion.div
+            className="absolute -top-8 text-green-500 font-bold text-sm z-50 pointer-events-none drop-shadow-md whitespace-nowrap"
+            initial={{ y: 0, opacity: 0, scale: 0.8 }}
+            animate={{ y: -10, opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.2 }}
+          >
+            🟢 被抓取中
+          </motion.div>
+        )}
+
         {/* Wool Indicator */}
         {(sheep.woolGrowth || 0) >= 100 && !isDead && (
           <motion.div
@@ -622,18 +917,33 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
           </motion.div>
         )}
 
+        {/* Growth Progress Bar */}
+        {!isDead && sheep.stage !== 'ADULT' && (
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-1.5 bg-black/30 rounded-full overflow-hidden z-50 pointer-events-none">
+            <div
+              className="h-full bg-gradient-to-r from-green-400 to-emerald-500 transition-all duration-300"
+              style={{
+                width: `${sheep.stage === 'BABY' ? (sheep.age / 960) * 100 : ((sheep.age - 960) / 960) * 100}%`
+              }}
+            />
+          </div>
+        )}
+
         {/* Hover Status HUD */}
         {isDead ? (
-          <div className={`absolute -top-12 bg-white/95 px-3 py-2 rounded-lg text-xs font-bold shadow-xl transition-opacity pointer-events-none z-[100] whitespace-nowrap border border-red-200 text-red-600 ${showStatus ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          <div className={`absolute -top-12 left-1/2 -translate-x-1/2 bg-white/95 px-3 py-2 rounded-lg text-xs font-bold shadow-xl transition-opacity pointer-events-none z-[9999] whitespace-nowrap border border-red-200 text-red-600 ${showStatus ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
             小羊死去了... 点击清除
           </div>
         ) : (
-          <div className={`absolute -top-28 bg-white/95 px-3 py-2 rounded-lg text-xs font-bold shadow-xl transition-opacity pointer-events-none z-[100] flex flex-col gap-1 whitespace-nowrap border border-slate-200 ${showStatus ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+          <div className={`absolute -top-32 left-1/2 -translate-x-1/2 bg-white/95 px-3 py-2 rounded-lg text-xs font-bold shadow-xl transition-opacity pointer-events-none z-[9999] flex flex-col gap-1 whitespace-nowrap border border-slate-200 ${showStatus ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
             <div className="text-slate-800 text-sm border-b border-slate-200 pb-1 mb-1">
               {sheep.name} {sheep.gender === 'MALE' ? '♂️' : '♀️'} ({sheep.stage === 'BABY' ? '幼崽' : sheep.stage === 'GROWING' ? '成长期' : '成年'})
             </div>
             <div className="flex items-center gap-2"><Heart className="w-3 h-3 text-red-500"/> 健康: {Math.round(sheep.health)}</div>
             <div className="flex items-center gap-2"><Wheat className="w-3 h-3 text-amber-600"/> 饱食: {Math.round(sheep.hunger)}</div>
+            {sheep.gender === 'FEMALE' && sheep.isPregnant && (
+              <div className="flex items-center gap-2 text-pink-600"><span className="text-pink-500">🤰</span> 怀孕中</div>
+            )}
           </div>
         )}
         
@@ -673,43 +983,64 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
 
             {sheep.gender === 'FEMALE' ? (
               sheep.stage === 'BABY' ? (
-                // Use pre-rendered img tags for animation to prevent any flickering
                 <div className="relative w-full h-full">
-                  {Array.from({ length: babyFrameCount }).map((_, index) => (
+                  {isNight && !isDead ? (
                     <img
-                      key={index}
-                      src={`/female-sheep-baby/frame_${index.toString().padStart(4, '0')}.png`}
-                      alt="Baby sheep frame"
-                      className={`absolute inset-0 w-full h-full object-contain ${
-                        currentFrame === index ? 'opacity-100' : 'opacity-0'
-                      }`}
+                      src="/sleep/female-baby-sleep.png"
+                      alt="Baby sheep sleeping"
+                      className="absolute inset-0 w-full h-full object-contain opacity-100"
                       style={{
                         imageRendering: 'pixelated',
                         filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
                       }}
                     />
-                  ))}
+                  ) : (
+                    Array.from({ length: babyFrameCount }).map((_, index) => (
+                      <img
+                        key={index}
+                        src={`/female-sheep-baby/frame_${index.toString().padStart(4, '0')}.png`}
+                        alt="Baby sheep frame"
+                        className={`absolute inset-0 w-full h-full object-contain ${
+                          currentFrame === index ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        style={{
+                          imageRendering: 'pixelated',
+                          filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
+                        }}
+                      />
+                    ))
+                  )}
                 </div>
               ) : sheep.stage === 'GROWING' ? (
-                // Use pre-rendered img tags for young sheep animation
                 <div className="relative w-full h-full">
-                  {youngFrames.map((frameNum, index) => (
+                  {isNight && !isDead ? (
                     <img
-                      key={frameNum}
-                      src={`/female-sheep-young/frame_${frameNum.toString().padStart(4, '0')}.png`}
-                      alt="Young sheep frame"
-                      className={`absolute inset-0 w-full h-full object-contain ${
-                        currentFrame === index ? 'opacity-100' : 'opacity-0'
-                      }`}
+                      src="/sleep/female-young-sleep.png"
+                      alt="Young sheep sleeping"
+                      className="absolute inset-0 w-full h-full object-contain opacity-100"
                       style={{
                         imageRendering: 'pixelated',
                         filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
                       }}
                     />
-                  ))}
+                  ) : (
+                    youngFrames.map((frameNum, index) => (
+                      <img
+                        key={frameNum}
+                        src={`/female-sheep-young/frame_${frameNum.toString().padStart(4, '0')}.png`}
+                        alt="Young sheep frame"
+                        className={`absolute inset-0 w-full h-full object-contain ${
+                          currentFrame === index ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        style={{
+                          imageRendering: 'pixelated',
+                          filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
+                        }}
+                      />
+                    ))
+                  )}
                 </div>
               ) : (
-                // Use pre-rendered img tags for adult sheep animation or sleeping state
                 <div className="relative w-full h-full">
                   {isNight && !isDead ? (
                     <img
@@ -742,54 +1073,90 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
             ) : (
               sheep.stage === 'BABY' ? (
                 <div className="relative w-full h-full">
-                  {Array.from({ length: maleBabyFrameCount }).map((_, index) => (
+                  {isNight && !isDead ? (
                     <img
-                      key={index}
-                      src={`/male-sheep-baby/frame_${index.toString().padStart(4, '0')}.png`}
-                      alt="Male baby sheep frame"
-                      className={`absolute inset-0 w-full h-full object-contain ${
-                        currentFrame === index ? 'opacity-100' : 'opacity-0'
-                      }`}
+                      src="/sleep/male-baby-sleep.png"
+                      alt="Male baby sheep sleeping"
+                      className="absolute inset-0 w-full h-full object-contain opacity-100"
                       style={{
                         imageRendering: 'pixelated',
                         filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
                       }}
                     />
-                  ))}
+                  ) : (
+                    Array.from({ length: maleBabyFrameCount }).map((_, index) => (
+                      <img
+                        key={index}
+                        src={`/male-sheep-baby/frame_${index.toString().padStart(4, '0')}.png`}
+                        alt="Male baby sheep frame"
+                        className={`absolute inset-0 w-full h-full object-contain ${
+                          currentFrame === index ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        style={{
+                          imageRendering: 'pixelated',
+                          filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
+                        }}
+                      />
+                    ))
+                  )}
                 </div>
               ) : sheep.stage === 'GROWING' ? (
                 <div className="relative w-full h-full">
-                  {Array.from({ length: maleYoungFrameCount }).map((_, index) => (
+                  {isNight && !isDead ? (
                     <img
-                      key={index}
-                      src={`/male-sheep-young/frame_${index.toString().padStart(4, '0')}.png`}
-                      alt="Male young sheep frame"
-                      className={`absolute inset-0 w-full h-full object-contain ${
-                        currentFrame === index ? 'opacity-100' : 'opacity-0'
-                      }`}
+                      src="/sleep/male-young-sleep.png"
+                      alt="Male young sheep sleeping"
+                      className="absolute inset-0 w-full h-full object-contain opacity-100"
                       style={{
                         imageRendering: 'pixelated',
                         filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
                       }}
                     />
-                  ))}
+                  ) : (
+                    Array.from({ length: maleYoungFrameCount }).map((_, index) => (
+                      <img
+                        key={index}
+                        src={`/male-sheep-young/frame_${index.toString().padStart(4, '0')}.png`}
+                        alt="Male young sheep frame"
+                        className={`absolute inset-0 w-full h-full object-contain ${
+                          currentFrame === index ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        style={{
+                          imageRendering: 'pixelated',
+                          filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
+                        }}
+                      />
+                    ))
+                  )}
                 </div>
               ) : (
                 <div className="relative w-full h-full">
-                  {Array.from({ length: maleAdultFrameCount }).map((_, index) => (
+                  {isNight && !isDead ? (
                     <img
-                      key={index}
-                      src={`/male-sheep-adult/frame_${index.toString().padStart(4, '0')}.png`}
-                      alt="Male adult sheep frame"
-                      className={`absolute inset-0 w-full h-full object-contain ${
-                        currentFrame === index ? 'opacity-100' : 'opacity-0'
-                      }`}
+                      src="/sleep/male-adult-sleep.png"
+                      alt="Male adult sheep sleeping"
+                      className="absolute inset-0 w-full h-full object-contain opacity-100"
                       style={{
                         imageRendering: 'pixelated',
                         filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
                       }}
                     />
-                  ))}
+                  ) : (
+                    Array.from({ length: maleAdultFrameCount }).map((_, index) => (
+                      <img
+                        key={index}
+                        src={`/male-sheep-adult/frame_${index.toString().padStart(4, '0')}.png`}
+                        alt="Male adult sheep frame"
+                        className={`absolute inset-0 w-full h-full object-contain ${
+                          currentFrame === index ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        style={{
+                          imageRendering: 'pixelated',
+                          filter: (sheep.health > 0 && sheep.health < 40) ? 'brightness(0.8) sepia(1) hue-rotate(-50deg) saturate(3)' : 'none'
+                        }}
+                      />
+                    ))
+                  )}
                 </div>
               )
             )}
