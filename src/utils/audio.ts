@@ -1,12 +1,13 @@
-import localSheepAudio from '../assets/sheep.mp3';
-
 let audioCtx: AudioContext | null = null;
 let sheepBuffer: AudioBuffer | null = null;
+let rainBuffer: AudioBuffer | null = null;
+let rainSource: AudioBufferSourceNode | null = null;
+let rainGain: GainNode | null = null;
 let useSynthFallback = false;
 
-const AUDIO_URLS = [
-  // Local downloaded MP3 (Imported via Vite to handle base paths correctly)
-  localSheepAudio,
+const SHEEP_AUDIO_URLS = [
+  // Local audio in public folder
+  '/audio/sheep.mp3',
   // Google Actions OGG (Works on Chrome/Firefox/Edge)
   'https://actions.google.com/sounds/v1/animals/sheep_bleat.ogg',
   // Mixkit MP3 (Works on Safari)
@@ -17,9 +18,10 @@ const AUDIO_URLS = [
   'https://raw.githubusercontent.com/kasperkamperman/MobileDev_HTML5_PhoneGap/master/www/audio/sheep.mp3'
 ];
 
+const RAIN_AUDIO_URL = '/audio/rainy.mp3';
+
 const decodeAudio = (ctx: AudioContext, arrayBuffer: ArrayBuffer): Promise<AudioBuffer> => {
   return new Promise((resolve, reject) => {
-    // Use callback syntax for Safari compatibility
     ctx.decodeAudioData(
       arrayBuffer,
       (buffer) => resolve(buffer),
@@ -34,6 +36,9 @@ export const initAudio = async () => {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextClass) return false;
       audioCtx = new AudioContextClass();
+      rainGain = audioCtx.createGain();
+      rainGain.connect(audioCtx.destination);
+      rainGain.gain.value = 0;
     }
     if (audioCtx.state === 'suspended') {
       await audioCtx.resume();
@@ -42,26 +47,37 @@ export const initAudio = async () => {
     // Fetch and decode the real sheep sound
     if (!sheepBuffer && !useSynthFallback) {
       let loaded = false;
-      for (const url of AUDIO_URLS) {
+      for (const url of SHEEP_AUDIO_URLS) {
         try {
           const response = await fetch(url);
-          if (!response.ok) {
-            console.warn(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
-            continue;
-          }
+          if (!response.ok) continue;
           const arrayBuffer = await response.arrayBuffer();
           sheepBuffer = await decodeAudio(audioCtx, arrayBuffer);
           loaded = true;
-          console.log(`Successfully loaded audio from: ${url}`);
-          break; // Successfully loaded and decoded
+          console.log(`Successfully loaded sheep audio from: ${url}`);
+          break;
         } catch (err) {
-          console.warn(`Failed to load/decode ${url}:`, err);
+          console.warn(`Failed to load sheep audio from ${url}:`, err);
         }
       }
-      
+
       if (!loaded) {
-        console.warn("All real audio files failed. Falling back to synthesizer.");
+        console.warn("All sheep audio files failed. Using synth fallback.");
         useSynthFallback = true;
+      }
+    }
+
+    // Load rain sound
+    if (!rainBuffer) {
+      try {
+        const response = await fetch(RAIN_AUDIO_URL);
+        if (response.ok) {
+          const arrayBuffer = await response.arrayBuffer();
+          rainBuffer = await decodeAudio(audioCtx, arrayBuffer);
+          console.log("Rain audio loaded successfully");
+        }
+      } catch (err) {
+        console.warn("Failed to load rain audio:", err);
       }
     }
 
@@ -76,13 +92,13 @@ const playSynthBaa = (volume: number) => {
   if (!audioCtx) return;
   const duration = 0.6 + Math.random() * 0.3;
   const t = audioCtx.currentTime;
-  
+
   const osc = audioCtx.createOscillator();
   osc.type = 'sawtooth';
-  
+
   const baseFreq = 300 + Math.random() * 80;
   const endFreq = baseFreq - 50 - Math.random() * 30;
-  
+
   osc.frequency.setValueAtTime(baseFreq, t);
   osc.frequency.exponentialRampToValueAtTime(endFreq, t + duration);
 
@@ -137,7 +153,7 @@ const playSynthBaa = (volume: number) => {
   osc.start(t);
   vibrato.start(t);
   tremolo.start(t);
-  
+
   osc.stop(t + duration);
   vibrato.stop(t + duration);
   tremolo.stop(t + duration);
@@ -153,9 +169,7 @@ export const playBaa = async (volume: number) => {
     try {
       const source = audioCtx.createBufferSource();
       source.buffer = sheepBuffer;
-
-      // Slight randomization of playback rate (pitch/speed) so it doesn't sound repetitive
-      source.playbackRate.value = 0.85 + Math.random() * 0.3; // 0.85x to 1.15x
+      source.playbackRate.value = 0.85 + Math.random() * 0.3;
 
       const gainNode = audioCtx.createGain();
       gainNode.gain.value = volume;
@@ -169,5 +183,28 @@ export const playBaa = async (volume: number) => {
     }
   } else if (useSynthFallback) {
     playSynthBaa(volume);
+  }
+};
+
+export const startRainSound = () => {
+  if (!audioCtx || !rainBuffer || rainSource) return;
+
+  rainSource = audioCtx.createBufferSource();
+  rainSource.buffer = rainBuffer;
+  rainSource.loop = true;
+  rainSource.connect(rainGain!);
+  rainSource.start();
+};
+
+export const stopRainSound = () => {
+  if (rainSource) {
+    rainSource.stop();
+    rainSource = null;
+  }
+};
+
+export const setRainVolume = (volume: number) => {
+  if (rainGain) {
+    rainGain.gain.setTargetAtTime(volume, audioCtx!.currentTime, 0.5);
   }
 };

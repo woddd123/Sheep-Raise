@@ -12,7 +12,7 @@ const GRASS_ANIM_FRAMES = [
 if (typeof window !== 'undefined') {
   GRASS_ANIM_FRAMES.forEach(src => {
     const img = new Image();
-    img.src = `/grass/grass-ani/${src}`;
+    img.src = `/objects/grass/grass-ani/${src}`;
   });
 }
 
@@ -100,7 +100,7 @@ function InteractiveGrass({ dec }: { key?: React.Key; dec: { id: string, x: numb
       }}
     >
       <img 
-        src={frameIdx === -1 ? '/grass/grass.png' : `/grass/grass-ani/${GRASS_ANIM_FRAMES[frameIdx]}`} 
+        src={frameIdx === -1 ? '/objects/grass/grass.png' : `/objects/grass/grass-ani/${GRASS_ANIM_FRAMES[frameIdx]}`} 
         className="w-full h-full object-contain"
         style={{ imageRendering: 'pixelated' }}
         alt="grass" 
@@ -265,7 +265,7 @@ export function SheepPen() {
               top: `${fence.y}px`,
               width: '32px',
               height: '32px',
-              backgroundImage: 'url(/fence.png)',
+              backgroundImage: 'url(/objects/fence.png)',
               backgroundSize: '100% 100%',
               imageRendering: 'pixelated',
               transform: `rotate(${fence.rotation ?? 0}deg)`,
@@ -306,7 +306,7 @@ export function SheepPen() {
             }}
           >
             <img
-              src={feeder.hay > 0 ? '/slut.png' : '/slut-empty.png'}
+              src={feeder.hay > 0 ? '/objects/slut.png' : '/objects/slut-empty.png'}
               className="w-full h-full object-contain"
               style={{ imageRendering: 'pixelated' }}
               alt="hay feeder"
@@ -364,7 +364,7 @@ export function SheepPen() {
               height: '16px'
             }}
           >
-            <img src="/shit.png" className="w-full h-full object-contain" style={{ imageRendering: 'pixelated' }} alt="poop" />
+            <img src="/objects/shit.png" className="w-full h-full object-contain" style={{ imageRendering: 'pixelated' }} alt="poop" />
           </div>
         ))}
         </div>

@@ -383,14 +383,27 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
             setIsMoving(false);
             setFacingRight(hayTargetX > prevPos.x);
 
-            // Eat from hay feeder for 10 seconds
+            // Eat from hay feeder
             let eatTicks = 0;
             const feedId = nearestHayFeeder!.id;
+            const sheepId = currentSheep.id;
             const eatTimer = setInterval(() => {
+              // Get latest hunger from store
+              const latestSheep = useGameStore.getState().farms.find(f => f.id === useGameStore.getState().currentFarmId)?.sheepList.find(s => s.id === sheepId);
+              const hunger = latestSheep?.hunger ?? 100;
+
+              // Only consume if not full
+              if (hunger < 100) {
+                consumeHay(feedId, 10);
+                eatGrass(sheepId, 10);
+              }
+              // Stop eating when full or after 10 seconds
+              if (hunger >= 100 || isDeadRef.current || isNightRef.current) {
+                clearInterval(eatTimer);
+                setIsEating(false);
+              }
               eatTicks++;
-              consumeHay(feedId, 10); // Consume 10 hay per second
-              eatGrass(currentSheep.id, 10); // Recover 10 hunger per second
-              if (eatTicks >= 10 || isDeadRef.current || isNightRef.current) {
+              if (eatTicks >= 10) {
                 clearInterval(eatTimer);
                 setIsEating(false);
               }
@@ -786,34 +799,34 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
       if (sheep.stage === 'BABY') {
         for (let i = 0; i < babyFrameCount; i++) {
           const img = new Image();
-          img.src = `/female-sheep-baby/frame_${i.toString().padStart(4, '0')}.png`;
+          img.src = `/sprites/female/baby/frame_${i.toString().padStart(4, '0')}.png`;
         }
       } else if (sheep.stage === 'GROWING') {
         youngFrames.forEach(frameNum => {
           const img = new Image();
-          img.src = `/female-sheep-young/frame_${frameNum.toString().padStart(4, '0')}.png`;
+          img.src = `/sprites/female/young/frame_${frameNum.toString().padStart(4, '0')}.png`;
         });
       } else if (sheep.stage === 'ADULT') {
         for (let i = 0; i < adultFrameCount; i++) {
           const img = new Image();
-          img.src = `/female-sheep-adult/frame_${i.toString().padStart(3, '0')}.png`;
+          img.src = `/sprites/female/adult/frame_${i.toString().padStart(3, '0')}.png`;
         }
       }
     } else if (sheep.gender === 'MALE') {
       if (sheep.stage === 'BABY') {
         for (let i = 0; i < maleBabyFrameCount; i++) {
           const img = new Image();
-          img.src = `/male-sheep-baby/frame_${i.toString().padStart(4, '0')}.png`;
+          img.src = `/sprites/male/baby/frame_${i.toString().padStart(4, '0')}.png`;
         }
       } else if (sheep.stage === 'GROWING') {
         for (let i = 0; i < maleYoungFrameCount; i++) {
           const img = new Image();
-          img.src = `/male-sheep-young/frame_${i.toString().padStart(4, '0')}.png`;
+          img.src = `/sprites/male/young/frame_${i.toString().padStart(4, '0')}.png`;
         }
       } else if (sheep.stage === 'ADULT') {
         for (let i = 0; i < maleAdultFrameCount; i++) {
           const img = new Image();
-          img.src = `/male-sheep-adult/frame_${i.toString().padStart(4, '0')}.png`;
+          img.src = `/sprites/male/adult/frame_${i.toString().padStart(4, '0')}.png`;
         }
       }
     }
@@ -917,6 +930,17 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
           </motion.div>
         )}
 
+        {/* Dead Indicator */}
+        {isDead && (
+          <motion.div
+            className="absolute -top-8 text-2xl z-50 pointer-events-none drop-shadow-md"
+            animate={{ y: [0, -5, 0], scale: [1, 1.1, 1] }}
+            transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+          >
+            💀
+          </motion.div>
+        )}
+
         {/* Growth Progress Bar */}
         {!isDead && sheep.stage !== 'ADULT' && (
           <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-1.5 bg-black/30 rounded-full overflow-hidden z-50 pointer-events-none">
@@ -948,14 +972,12 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
         )}
         
         {/* Pixel Art Sheep */}
-        <div 
+        <div
           className={`${sizeClass} drop-shadow-md ${isDead ? 'grayscale opacity-70' : ''}`}
-          style={{ 
+          style={{
             // all frames (male and female) are facing right now.
             // so we need to reverse the scaling logic for all sheep.
-            transform: `${
-              (facingRight ? 'scaleX(1)' : 'scaleX(-1)')
-            } ${isDead ? 'rotate(180deg)' : ''}`,
+            transform: `${facingRight ? 'scaleX(1)' : 'scaleX(-1)'}`,
             imageRendering: 'pixelated'
           }}
         >
@@ -975,7 +997,7 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
                 className="absolute -top-6 right-[-10px] text-blue-200 font-bold text-xs z-50 pointer-events-none drop-shadow-sm"
                 animate={{ y: [0, -20], opacity: [0, 1, 0], scale: [0.5, 1, 1.2] }}
                 transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
-                style={{ transform: facingRight ? 'scaleX(-1)' : 'scaleX(1)' }} // Counteract parent flip
+                style={{ transform: facingRight ? 'scaleX(-1)' : 'scaleX(1)' }}
               >
                 zZz
               </motion.div>
@@ -984,9 +1006,9 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
             {sheep.gender === 'FEMALE' ? (
               sheep.stage === 'BABY' ? (
                 <div className="relative w-full h-full">
-                  {isNight && !isDead ? (
+                  {isNight || isDead ? (
                     <img
-                      src="/sleep/female-baby-sleep.png"
+                      src="/objects/sleep/female-baby-sleep.png"
                       alt="Baby sheep sleeping"
                       className="absolute inset-0 w-full h-full object-contain opacity-100"
                       style={{
@@ -998,7 +1020,7 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
                     Array.from({ length: babyFrameCount }).map((_, index) => (
                       <img
                         key={index}
-                        src={`/female-sheep-baby/frame_${index.toString().padStart(4, '0')}.png`}
+                        src={`/sprites/female/baby/frame_${index.toString().padStart(4, '0')}.png`}
                         alt="Baby sheep frame"
                         className={`absolute inset-0 w-full h-full object-contain ${
                           currentFrame === index ? 'opacity-100' : 'opacity-0'
@@ -1013,9 +1035,9 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
                 </div>
               ) : sheep.stage === 'GROWING' ? (
                 <div className="relative w-full h-full">
-                  {isNight && !isDead ? (
+                  {isNight || isDead ? (
                     <img
-                      src="/sleep/female-young-sleep.png"
+                      src="/objects/sleep/female-young-sleep.png"
                       alt="Young sheep sleeping"
                       className="absolute inset-0 w-full h-full object-contain opacity-100"
                       style={{
@@ -1027,7 +1049,7 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
                     youngFrames.map((frameNum, index) => (
                       <img
                         key={frameNum}
-                        src={`/female-sheep-young/frame_${frameNum.toString().padStart(4, '0')}.png`}
+                        src={`/sprites/female/young/frame_${frameNum.toString().padStart(4, '0')}.png`}
                         alt="Young sheep frame"
                         className={`absolute inset-0 w-full h-full object-contain ${
                           currentFrame === index ? 'opacity-100' : 'opacity-0'
@@ -1042,9 +1064,9 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
                 </div>
               ) : (
                 <div className="relative w-full h-full">
-                  {isNight && !isDead ? (
+                  {isNight || isDead ? (
                     <img
-                      src="/sleep/female-adult-sleep.png"
+                      src="/objects/sleep/female-adult-sleep.png"
                       alt="Adult sheep sleeping"
                       className="absolute inset-0 w-full h-full object-contain opacity-100"
                       style={{
@@ -1056,7 +1078,7 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
                     Array.from({ length: adultFrameCount }).map((_, index) => (
                       <img
                         key={index}
-                        src={`/female-sheep-adult/frame_${index.toString().padStart(3, '0')}.png`}
+                        src={`/sprites/female/adult/frame_${index.toString().padStart(3, '0')}.png`}
                         alt="Adult sheep frame"
                         className={`absolute inset-0 w-full h-full object-contain ${
                           currentFrame === index ? 'opacity-100' : 'opacity-0'
@@ -1073,9 +1095,9 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
             ) : (
               sheep.stage === 'BABY' ? (
                 <div className="relative w-full h-full">
-                  {isNight && !isDead ? (
+                  {isNight || isDead ? (
                     <img
-                      src="/sleep/male-baby-sleep.png"
+                      src="/objects/sleep/male-baby-sleep.png"
                       alt="Male baby sheep sleeping"
                       className="absolute inset-0 w-full h-full object-contain opacity-100"
                       style={{
@@ -1087,7 +1109,7 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
                     Array.from({ length: maleBabyFrameCount }).map((_, index) => (
                       <img
                         key={index}
-                        src={`/male-sheep-baby/frame_${index.toString().padStart(4, '0')}.png`}
+                        src={`/sprites/male/baby/frame_${index.toString().padStart(4, '0')}.png`}
                         alt="Male baby sheep frame"
                         className={`absolute inset-0 w-full h-full object-contain ${
                           currentFrame === index ? 'opacity-100' : 'opacity-0'
@@ -1102,9 +1124,9 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
                 </div>
               ) : sheep.stage === 'GROWING' ? (
                 <div className="relative w-full h-full">
-                  {isNight && !isDead ? (
+                  {isNight || isDead ? (
                     <img
-                      src="/sleep/male-young-sleep.png"
+                      src="/objects/sleep/male-young-sleep.png"
                       alt="Male young sheep sleeping"
                       className="absolute inset-0 w-full h-full object-contain opacity-100"
                       style={{
@@ -1116,7 +1138,7 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
                     Array.from({ length: maleYoungFrameCount }).map((_, index) => (
                       <img
                         key={index}
-                        src={`/male-sheep-young/frame_${index.toString().padStart(4, '0')}.png`}
+                        src={`/sprites/male/young/frame_${index.toString().padStart(4, '0')}.png`}
                         alt="Male young sheep frame"
                         className={`absolute inset-0 w-full h-full object-contain ${
                           currentFrame === index ? 'opacity-100' : 'opacity-0'
@@ -1131,9 +1153,9 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
                 </div>
               ) : (
                 <div className="relative w-full h-full">
-                  {isNight && !isDead ? (
+                  {isNight || isDead ? (
                     <img
-                      src="/sleep/male-adult-sleep.png"
+                      src="/objects/sleep/male-adult-sleep.png"
                       alt="Male adult sheep sleeping"
                       className="absolute inset-0 w-full h-full object-contain opacity-100"
                       style={{
@@ -1145,7 +1167,7 @@ export const SheepEntity: React.FC<{ sheep: Sheep }> = ({ sheep }) => {
                     Array.from({ length: maleAdultFrameCount }).map((_, index) => (
                       <img
                         key={index}
-                        src={`/male-sheep-adult/frame_${index.toString().padStart(4, '0')}.png`}
+                        src={`/sprites/male/adult/frame_${index.toString().padStart(4, '0')}.png`}
                         alt="Male adult sheep frame"
                         className={`absolute inset-0 w-full h-full object-contain ${
                           currentFrame === index ? 'opacity-100' : 'opacity-0'

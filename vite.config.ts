@@ -20,22 +20,22 @@ export default defineConfig(({mode}) => {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,mp3}'],
         },
         manifest: {
-          name: 'Sheep Farm Simulator',
-          short_name: 'SheepFarm',
-          description: 'A casual sheep farming simulation game',
+          name: '羊羊牧场',
+          short_name: '羊羊牧场',
+          description: '一个有趣的养羊模拟游戏',
           theme_color: '#4ade80',
           background_color: '#ffffff',
           display: 'standalone',
           icons: [
             {
-              src: 'https://api.iconify.design/lucide:tractor.svg',
+              src: '/icon-192.png',
               sizes: '192x192',
-              type: 'image/svg+xml'
+              type: 'image/png'
             },
             {
-              src: 'https://api.iconify.design/lucide:tractor.svg',
+              src: '/icon-512.png',
               sizes: '512x512',
-              type: 'image/svg+xml'
+              type: 'image/png'
             }
           ]
         }

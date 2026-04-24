@@ -4,10 +4,10 @@ import { useGameStore } from './store/gameStore';
 import { Droplets, Wheat, Heart, Coins, Star, Plus, Moon, Sun, Wrench, X, Maximize2, Volume2, VolumeX, ChevronRight, ChevronLeft, Hammer, Trash2, Hand, MapPin } from 'lucide-react';
 import { SheepPen } from './components/SheepPen';
 import { FarmSelector } from './components/FarmSelector';
-import { initAudio, playBaa } from './utils/audio';
+import { initAudio, playBaa, startRainSound, stopRainSound, setRainVolume } from './utils/audio';
 
 export default function App() {
-  const { level, exp, coins, gameTick, addSheep, cleanAll, addCoins, timeOfDay, sellSheep, shearSheep, sellWool, breedSheep, buyFeed, devSetState, wool, feed, timeSpeed, soundEnabled, setSoundEnabled, weather, windDirection, windStrength } = useGameStore();
+  const { level, exp, coins, gameTick, addSheep, cleanAll, addCoins, timeOfDay, sellSheep, shearSheep, sellWool, breedSheep, buyFeed, resetGame, devSetState, wool, feed, timeSpeed, soundEnabled, setSoundEnabled, weather, windDirection, windStrength } = useGameStore();
 
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
   const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(false);
@@ -32,6 +32,16 @@ export default function App() {
       prevCoinsRef.current = coins;
     }
   }, [coins]);
+
+  // Handle rain sound based on weather
+  useEffect(() => {
+    if (weather === 'rainy') {
+      startRainSound();
+      setRainVolume(soundEnabled ? 0.3 : 0);
+    } else {
+      stopRainSound();
+    }
+  }, [weather, soundEnabled]);
 
   // Get current farm data
   const farms = useGameStore(state => state.farms);
@@ -349,7 +359,7 @@ export default function App() {
       <div 
         className="fixed inset-0 pointer-events-none z-0"
         style={{
-          backgroundImage: 'url(/grass/grasses.png)',
+          backgroundImage: 'url(/objects/grass/grasses.png)',
           backgroundSize: '128px 32px', // Size of the 4-tile strip
           backgroundRepeat: 'repeat',
           imageRendering: 'pixelated'
@@ -707,6 +717,14 @@ export default function App() {
                   onChange={(e) => devSetState({ timeOfDay: Number(e.target.value) })}
                   className="w-full"
                 />
+              </div>
+              <div className="pt-4 border-t border-slate-200">
+                <button
+                  onClick={resetGame}
+                  className="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-3 rounded-xl text-sm font-bold transition-colors"
+                >
+                  重置游戏数据
+                </button>
               </div>
             </div>
           </div>

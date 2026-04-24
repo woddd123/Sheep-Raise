@@ -125,6 +125,7 @@ interface GameState {
   breedSheep: (id: string) => void;
   sellWool: () => void;
   buyFeed: () => void;
+  resetGame: () => void;
   devSetState: (newState: Partial<GameState>) => void;
   setSoundEnabled: (enabled: boolean) => void;
   triggerWeather: (weather: 'sunny' | 'rainy' | 'windy', durationSeconds: number) => void;
@@ -355,6 +356,36 @@ export const useGameStore = create<GameState>()(
           feed: state.feed + 1
         };
       }),
+
+      resetGame: () => {
+        localStorage.removeItem('sheep-farm-storage');
+        const newId = `farm-${Date.now()}`;
+        const defaultFarm = createDefaultFarm(newId, '我的牧场');
+        window.location.reload();
+        return {
+          level: 1,
+          exp: 0,
+          coins: 100,
+          wool: 0,
+          feed: 0,
+          timeOfDay: 8,
+          timeSpeed: 1,
+          weather: 'sunny',
+          windDirection: 0,
+          windStrength: 0,
+          weatherEndTime: 0,
+          lastTick: Date.now(),
+          farms: [defaultFarm],
+          currentFarmId: newId,
+          hayFeederMode: false,
+          buildMode: false,
+          demolishMode: false,
+          pickUpMode: false,
+          pickedUpSheepId: null,
+          dropTargetPos: null,
+          soundEnabled: true,
+        };
+      },
 
       consumeHay: (id, amount) => set((state) => ({
         farms: state.farms.map(f => f.id === state.currentFarmId ? {
